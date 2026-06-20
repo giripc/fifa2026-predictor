@@ -16,7 +16,11 @@ function setupSheets() {
   ]]);
 
   _ensureSheet(ss, SHEETS.PARTICIPANTS, [[
-    'ParticipantId','Name','Email','PoolGroup','JoinDate'
+    'ParticipantId','Name','Email','JoinDate'
+  ]]);
+
+  _ensureSheet(ss, SHEETS.MEMBERSHIPS, [[
+    'MembershipId','ParticipantId','GroupName','JoinDate'
   ]]);
 
   _ensureSheet(ss, SHEETS.PREDICTIONS, [[

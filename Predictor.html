@@ -11,34 +11,43 @@
     .page-header h1{color:#f0c030;font-size:1.8rem;margin-bottom:4px}
     .page-header .sub{color:#aaa;font-size:.9rem}
 
-    /* Auth card — centered, narrow */
+    /* Auth cards */
     .auth-wrap{display:flex;justify-content:center}
     .card{background:#122040;border-radius:12px;padding:28px;width:100%;max-width:460px}
     label{display:block;margin-top:14px;font-size:.85rem;color:#bbb}
-    input{width:100%;padding:10px;margin-top:4px;border:1px solid #2a4070;border-radius:6px;background:#0d1f3c;color:#eee;font-size:.95rem}
-    input:focus{outline:none;border-color:#f0c030}
-    .btn{margin-top:20px;width:100%;padding:11px;background:#f0c030;color:#0a1628;font-weight:bold;font-size:1rem;border:none;border-radius:6px;cursor:pointer}
+    input,select{width:100%;padding:10px;margin-top:4px;border:1px solid #2a4070;border-radius:6px;
+      background:#0d1f3c;color:#eee;font-size:.95rem}
+    input:focus,select:focus{outline:none;border-color:#f0c030}
+    .btn{margin-top:20px;width:100%;padding:11px;background:#f0c030;color:#0a1628;font-weight:bold;
+      font-size:1rem;border:none;border-radius:6px;cursor:pointer}
     .btn:hover{background:#f5d060}
     .btn-sec{background:#1e3a6e;color:#eee;margin-top:10px}
     .btn-sec:hover{background:#2a4e8c}
+    .btn-sm{padding:7px 16px;font-size:.85rem;border:none;border-radius:6px;cursor:pointer;
+      background:#1e3a6e;color:#eee;margin-top:0}
+    .btn-sm:hover{background:#2a4e8c}
     .error{color:#f87171;font-size:.85rem;margin-top:10px}
     .success{color:#6ee7b7;font-size:.85rem;margin-top:10px}
     .hidden{display:none}
 
+    /* Tab bar */
+    .tab-bar{display:flex;gap:8px;margin-bottom:24px}
+    .tab{padding:9px 22px;border-radius:8px;border:1px solid #2a4070;cursor:pointer;
+      font-size:.9rem;background:transparent;color:#aaa}
+    .tab.active{background:#f0c030;color:#0a1628;font-weight:bold;border-color:#f0c030}
+
     /* Predict layout */
-    #stepPredict{width:100%}
     .predict-header{display:flex;justify-content:space-between;align-items:center;
       background:#122040;border-radius:10px;padding:14px 20px;margin-bottom:24px;flex-wrap:wrap;gap:10px}
     .predict-header .welcome{color:#6ee7b7;font-size:1rem;font-weight:bold}
-    .predict-header .sub{color:#aaa;font-size:.82rem}
+    .predict-header .sub{color:#aaa;font-size:.82rem;margin-top:2px}
+    .groups-badge{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+    .badge{background:#1e3a6e;color:#6ee7b7;font-size:.75rem;padding:3px 10px;border-radius:20px}
 
-    .stage-header{color:#f0c030;font-size:.82rem;font-weight:bold;
-      text-transform:uppercase;letter-spacing:.08em;
-      margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid #2a4070}
+    .stage-header{color:#f0c030;font-size:.82rem;font-weight:bold;text-transform:uppercase;
+      letter-spacing:.08em;margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid #2a4070}
 
-    /* Grid */
     .match-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-
     .match-card{background:#122040;border:1px solid #2a4070;border-radius:10px;padding:16px;
       display:flex;flex-direction:column;gap:10px;transition:border-color .2s}
     .match-card:hover{border-color:#f0c030}
@@ -48,17 +57,31 @@
     .match-teams .team{flex:1;text-align:center}
     .match-teams .vs{color:#555;font-size:.8rem;flex:none}
     .score-row{display:flex;align-items:center;gap:8px;justify-content:center}
-    .score-row input{text-align:center;font-size:1.1rem;font-weight:bold;
-      width:52px;padding:8px 4px;border:1px solid #2a4070;border-radius:6px;
-      background:#0d1f3c;color:#f0c030}
+    .score-row input{text-align:center;font-size:1.1rem;font-weight:bold;width:52px;padding:8px 4px;
+      border:1px solid #2a4070;border-radius:6px;background:#0d1f3c;color:#f0c030}
     .score-row input:focus{outline:none;border-color:#f0c030}
     .score-row .dash{color:#555;font-size:1rem}
-    .save-btn{padding:7px 16px;background:#1e3a6e;color:#eee;border:none;
-      border-radius:6px;cursor:pointer;font-size:.85rem;white-space:nowrap}
+    .save-btn{padding:7px 16px;background:#1e3a6e;color:#eee;border:none;border-radius:6px;
+      cursor:pointer;font-size:.85rem;white-space:nowrap}
     .save-btn:hover{background:#f0c030;color:#0a1628}
     .save-btn:disabled{opacity:.5;cursor:default}
     .status-line{font-size:.75rem;min-height:16px;color:#6ee7b7;text-align:center}
     .status-line.err{color:#f87171}
+
+    /* Leaderboard */
+    .lb-controls{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+    .lb-controls label{margin:0;font-size:.85rem;color:#bbb}
+    .lb-controls select{width:auto;min-width:180px}
+    .lb-table{width:100%;border-collapse:collapse;font-size:.9rem}
+    .lb-table th{background:#1a3060;color:#f0c030;padding:10px 14px;text-align:left;
+      font-size:.78rem;text-transform:uppercase;letter-spacing:.05em}
+    .lb-table td{padding:10px 14px;border-bottom:1px solid #1a2f55}
+    .lb-table tr:hover td{background:#122040}
+    .rank-1{color:#f0c030;font-weight:bold;font-size:1.1rem}
+    .rank-2{color:#c0c0c0;font-weight:bold}
+    .rank-3{color:#cd7f32;font-weight:bold}
+    .score-pts{font-weight:bold;color:#6ee7b7}
+    .highlight-me td{background:#0d2545 !important}
 
     #loading{text-align:center;padding:40px;color:#aaa;font-size:1rem}
   </style>
@@ -88,32 +111,101 @@
   <label>Full Name   <input id="regName" placeholder="Your name"/></label>
   <label>Invite Code <input id="regCode" placeholder="Ask your group admin"/></label>
   <button class="btn" onclick="register()">Join & Start Predicting →</button>
-  <button class="btn btn-sec" onclick="show('stepEmail')">← Back</button>
+  <button class="btn btn-sec" onclick="showStep('stepEmail')">← Back</button>
   <div id="regErr" class="error"></div>
 </div>
 </div>
 
-<!-- Step 3: Predict -->
-<div id="stepPredict" class="hidden">
+<!-- Step 3: Join additional group -->
+<div class="auth-wrap">
+<div id="stepJoin" class="card hidden">
+  <div class="success">Enter an invite code to join another group.</div>
+  <label>Invite Code <input id="joinCode" placeholder="Ask your group admin"/></label>
+  <button class="btn" onclick="joinGroup()">Join Group →</button>
+  <button class="btn btn-sec" onclick="showApp()">← Cancel</button>
+  <div id="joinErr" class="error"></div>
+</div>
+</div>
+
+<!-- Step 4: Main app (predict + leaderboard) -->
+<div id="stepApp" class="hidden">
+  <!-- Header -->
   <div class="predict-header">
     <div>
       <div id="welcomeMsg" class="welcome"></div>
       <div class="sub">Save your predictions before kickoff</div>
+      <div id="groupBadges" class="groups-badge"></div>
+    </div>
+    <button class="btn-sm" onclick="showStep('stepJoin')">+ Join a Group</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-bar">
+    <button class="tab active" id="tabPredict" onclick="switchTab('predict')">⚽ Predict</button>
+    <button class="tab" id="tabLeaderboard" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
+  </div>
+
+  <!-- Predict panel -->
+  <div id="panelPredict">
+    <div id="loading">Loading matches…</div>
+    <div id="matchList"></div>
+  </div>
+
+  <!-- Leaderboard panel -->
+  <div id="panelLeaderboard" class="hidden">
+    <div class="lb-controls">
+      <label>Group
+        <select id="lbGroupSelect" onchange="loadLeaderboard()">
+          <option value="">🌍 Global (all groups)</option>
+        </select>
+      </label>
+    </div>
+    <div id="lbLoading" style="text-align:center;padding:40px;color:#aaa">Loading…</div>
+    <table class="lb-table hidden" id="lbTable">
+      <thead>
+        <tr>
+          <th>#</th><th>Name</th><th>Groups</th><th>Points</th>
+        </tr>
+      </thead>
+      <tbody id="lbBody"></tbody>
+    </table>
+    <div id="lbEmpty" class="hidden" style="text-align:center;padding:40px;color:#aaa">
+      No completed matches yet — check back after the first game!
     </div>
   </div>
-  <div id="loading">Loading matches…</div>
-  <div id="matchList"></div>
 </div>
 
 <script>
   var participant = null;
+  var matchesLoaded = false;
+  var lbLoaded = false;
 
-  function show(id) {
-    ['stepEmail','stepRegister','stepPredict'].forEach(function(s) {
+  // ── Navigation ──────────────────────────────────────────────
+
+  function showStep(id) {
+    ['stepEmail','stepRegister','stepJoin','stepApp'].forEach(function(s) {
       document.getElementById(s).classList.add('hidden');
     });
     document.getElementById(id).classList.remove('hidden');
   }
+
+  function showApp() {
+    showStep('stepApp');
+    refreshGroupBadges();
+  }
+
+  function switchTab(tab) {
+    document.getElementById('tabPredict').classList.toggle('active', tab === 'predict');
+    document.getElementById('tabLeaderboard').classList.toggle('active', tab === 'leaderboard');
+    document.getElementById('panelPredict').classList.toggle('hidden', tab !== 'predict');
+    document.getElementById('panelLeaderboard').classList.toggle('hidden', tab !== 'leaderboard');
+    if (tab === 'leaderboard' && !lbLoaded) {
+      populateGroupSelect();
+      loadLeaderboard();
+    }
+  }
+
+  // ── Auth ────────────────────────────────────────────────────
 
   function checkEmail() {
     var email = document.getElementById('email').value.trim();
@@ -122,8 +214,8 @@
     google.script.run
       .withSuccessHandler(function(p) {
         document.getElementById('emailErr').textContent = '';
-        if (p) { participant = p; showPredict(); }
-        else   { show('stepRegister'); }
+        if (p) { participant = p; showApp(); loadMatches(); }
+        else   { showStep('stepRegister'); }
       })
       .withFailureHandler(function(e) {
         document.getElementById('emailErr').textContent = e.message;
@@ -141,7 +233,7 @@
       .withSuccessHandler(function(r) {
         if (r.error) { document.getElementById('regErr').textContent = r.error; return; }
         google.script.run
-          .withSuccessHandler(function(p) { participant = p; showPredict(); })
+          .withSuccessHandler(function(p) { participant = p; showApp(); loadMatches(); })
           .lookupParticipant(email);
       })
       .withFailureHandler(function(e) {
@@ -150,14 +242,40 @@
       .registerParticipant(name, email, code);
   }
 
-  function showPredict() {
-    show('stepPredict');
-    document.getElementById('welcomeMsg').textContent =
-      'Welcome, ' + participant.name + '! 👋  Group: ' + participant.group;
+  function joinGroup() {
+    var code = document.getElementById('joinCode').value.trim();
+    if (!code) { document.getElementById('joinErr').textContent = 'Enter an invite code.'; return; }
+    document.getElementById('joinErr').textContent = 'Joining…';
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r.error) { document.getElementById('joinErr').textContent = r.error; return; }
+        participant.groups.push(r.groupName);
+        document.getElementById('joinCode').value = '';
+        document.getElementById('joinErr').textContent = '';
+        showApp();
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('joinErr').textContent = e.message;
+      })
+      .joinGroup(participant.id, code);
+  }
+
+  function refreshGroupBadges() {
+    document.getElementById('welcomeMsg').textContent = 'Welcome, ' + participant.name + '! 👋';
+    var badges = participant.groups.map(function(g) {
+      return '<span class="badge">' + g + '</span>';
+    }).join('');
+    document.getElementById('groupBadges').innerHTML = badges;
+  }
+
+  // ── Predictions ─────────────────────────────────────────────
+
+  function loadMatches() {
+    if (matchesLoaded) return;
     google.script.run
       .withSuccessHandler(function(matches) {
         google.script.run
-          .withSuccessHandler(function(preds) { renderMatches(matches, preds); })
+          .withSuccessHandler(function(preds) { renderMatches(matches, preds); matchesLoaded = true; })
           .getMyPredictions(participant.id);
       })
       .getUpcomingMatches();
@@ -171,8 +289,7 @@
       return;
     }
 
-    var byStage = {};
-    var stageOrder = [];
+    var byStage = {}, stageOrder = [];
     matches.forEach(function(m) {
       var s = m.stage || 'Other';
       if (!byStage[s]) { byStage[s] = []; stageOrder.push(s); }
@@ -181,8 +298,7 @@
 
     var html = '';
     stageOrder.forEach(function(stage) {
-      html += '<div class="stage-header">' + stage + '</div>';
-      html += '<div class="match-grid">';
+      html += '<div class="stage-header">' + stage + '</div><div class="match-grid">';
       byStage[stage].forEach(function(m) {
         var d = new Date(m.date);
         var dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
@@ -191,16 +307,13 @@
         var savedTxt = preds[m.id] ? '✓ ' + pred.home + ' – ' + pred.away : '';
         html += '<div class="match-card">'
           + '<div class="match-meta">' + dateStr + (m.group ? ' · ' + m.group : '') + '</div>'
-          + '<div class="match-teams">'
-          +   '<span class="team">' + m.home + '</span>'
-          +   '<span class="vs">vs</span>'
-          +   '<span class="team">' + m.away + '</span>'
-          + '</div>'
+          + '<div class="match-teams"><span class="team">' + m.home + '</span>'
+          + '<span class="vs">vs</span><span class="team">' + m.away + '</span></div>'
           + '<div class="score-row">'
-          +   '<input id="h_' + m.id + '" type="number" min="0" max="20" value="' + (pred.home !== undefined ? pred.home : '') + '" placeholder="0"/>'
-          +   '<span class="dash">–</span>'
-          +   '<input id="a_' + m.id + '" type="number" min="0" max="20" value="' + (pred.away !== undefined ? pred.away : '') + '" placeholder="0"/>'
-          +   '<button class="save-btn" onclick="savePred(\'' + m.id + '\',this)">Save</button>'
+          + '<input id="h_' + m.id + '" type="number" min="0" max="20" value="' + (pred.home !== undefined ? pred.home : '') + '" placeholder="0"/>'
+          + '<span class="dash">–</span>'
+          + '<input id="a_' + m.id + '" type="number" min="0" max="20" value="' + (pred.away !== undefined ? pred.away : '') + '" placeholder="0"/>'
+          + '<button class="save-btn" onclick="savePred(\'' + m.id + '\',this)">Save</button>'
           + '</div>'
           + '<div id="status_' + m.id + '" class="status-line">' + savedTxt + '</div>'
           + '</div>';
@@ -232,6 +345,58 @@
         statusEl.textContent = e.message;
       })
       .submitPrediction(participant.id, matchId, h, a);
+  }
+
+  // ── Leaderboard ─────────────────────────────────────────────
+
+  function populateGroupSelect() {
+    google.script.run
+      .withSuccessHandler(function(groups) {
+        var sel = document.getElementById('lbGroupSelect');
+        groups.forEach(function(g) {
+          var opt = document.createElement('option');
+          opt.value = g; opt.textContent = g;
+          sel.appendChild(opt);
+        });
+        // Pre-select participant's first group if they're in one
+        if (participant.groups.length > 0) sel.value = participant.groups[0];
+      })
+      .getGroupNames();
+  }
+
+  function loadLeaderboard() {
+    var groupName = document.getElementById('lbGroupSelect').value || null;
+    document.getElementById('lbLoading').classList.remove('hidden');
+    document.getElementById('lbTable').classList.add('hidden');
+    document.getElementById('lbEmpty').classList.add('hidden');
+    lbLoaded = true;
+
+    google.script.run
+      .withSuccessHandler(function(rows) {
+        document.getElementById('lbLoading').classList.add('hidden');
+        if (!rows.length) {
+          document.getElementById('lbEmpty').classList.remove('hidden');
+          return;
+        }
+        var tbody = document.getElementById('lbBody');
+        tbody.innerHTML = '';
+        rows.forEach(function(r) {
+          var rankClass = r.rank === 1 ? 'rank-1' : r.rank === 2 ? 'rank-2' : r.rank === 3 ? 'rank-3' : '';
+          var isMe = r.id === participant.id;
+          var tr = document.createElement('tr');
+          if (isMe) tr.className = 'highlight-me';
+          tr.innerHTML = '<td class="' + rankClass + '">' + r.rank + '</td>'
+            + '<td>' + r.name + (isMe ? ' <span style="color:#f0c030;font-size:.75rem">(you)</span>' : '') + '</td>'
+            + '<td style="font-size:.78rem;color:#888">' + (r.groups ? r.groups.join(', ') : '') + '</td>'
+            + '<td class="score-pts">' + r.score + '</td>';
+          tbody.appendChild(tr);
+        });
+        document.getElementById('lbTable').classList.remove('hidden');
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('lbLoading').textContent = 'Error: ' + e.message;
+      })
+      .getLeaderboard(groupName);
   }
 </script>
 </body>

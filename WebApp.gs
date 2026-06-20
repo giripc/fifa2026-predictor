@@ -4,36 +4,53 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+// ── Auth ─────────────────────────────────────────────────────
+
 function lookupParticipant(email) {
   const data = SpreadsheetApp.getActiveSpreadsheet()
     .getSheetByName(SHEETS.PARTICIPANTS).getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (data[i][2].toString().toLowerCase() === email.toLowerCase())
-      return { id: data[i][0], name: data[i][1], group: data[i][3] };
+    if (data[i][2].toString().toLowerCase() === email.toLowerCase()) {
+      const groups = _getGroupsForParticipant(data[i][0]);
+      return { id: data[i][0], name: data[i][1], groups: groups };
+    }
   }
   return null;
 }
 
 function registerParticipant(name, email, inviteCode) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  const groups = ss.getSheetByName(SHEETS.GROUPS).getDataRange().getValues();
-  let groupName = null;
-  for (let i = 1; i < groups.length; i++) {
-    if (groups[i][0].toString().toUpperCase() === inviteCode.toUpperCase()) {
-      groupName = groups[i][1];
-      break;
-    }
-  }
+  const groupName = _resolveInviteCode(inviteCode);
   if (!groupName) return { error: 'Invalid invite code. Please check with your group admin.' };
 
   if (lookupParticipant(email)) return { error: 'Email already registered. Go back and enter your email to predict.' };
 
+  const participantId = Utilities.getUuid();
   ss.getSheetByName(SHEETS.PARTICIPANTS)
-    .appendRow([Utilities.getUuid(), name, email, groupName, new Date().toISOString()]);
+    .appendRow([participantId, name, email, new Date().toISOString()]);
+  ss.getSheetByName(SHEETS.MEMBERSHIPS)
+    .appendRow([Utilities.getUuid(), participantId, groupName, new Date().toISOString()]);
 
-  return { success: true, name, group: groupName };
+  return { success: true, name, groups: [groupName] };
 }
+
+function joinGroup(participantId, inviteCode) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const groupName = _resolveInviteCode(inviteCode);
+  if (!groupName) return { error: 'Invalid invite code. Please check with your group admin.' };
+
+  // Prevent duplicate membership
+  const existing = _getGroupsForParticipant(participantId);
+  if (existing.indexOf(groupName) !== -1)
+    return { error: 'You are already in the group "' + groupName + '".' };
+
+  ss.getSheetByName(SHEETS.MEMBERSHIPS)
+    .appendRow([Utilities.getUuid(), participantId, groupName, new Date().toISOString()]);
+
+  return { success: true, groupName: groupName };
+}
+
+// ── Predictions ──────────────────────────────────────────────
 
 function getUpcomingMatches() {
   var data = SpreadsheetApp.getActiveSpreadsheet()
@@ -47,14 +64,7 @@ function getUpcomingMatches() {
       return !isNaN(kickoff) && (kickoff - now) > cutoffMs;
     })
     .map(function(r) {
-      return {
-        id:    r[0],
-        stage: r[1],
-        date:  r[4],
-        group: r[3],
-        home:  r[5],
-        away:  r[6],
-      };
+      return { id: r[0], stage: r[1], date: r[4], group: r[3], home: r[5], away: r[6] };
     });
 }
 
@@ -80,11 +90,121 @@ function submitPrediction(participantId, matchId, predHome, predAway) {
       return { success: true };
     }
   }
-  sheet.appendRow([
-    Utilities.getUuid(), participantId, matchId,
-    predHome, predAway, new Date().toISOString()
-  ]);
+  sheet.appendRow([Utilities.getUuid(), participantId, matchId,
+    predHome, predAway, new Date().toISOString()]);
   return { success: true };
+}
+
+// ── Leaderboard ──────────────────────────────────────────────
+
+/**
+ * Returns ranked leaderboard entries.
+ * groupName: null → global (all groups), string → filter to that group.
+ */
+function getLeaderboard(groupName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Build participantId → name map (and optional group filter)
+  const partData = ss.getSheetByName(SHEETS.PARTICIPANTS).getDataRange().getValues().slice(1);
+  const memberData = ss.getSheetByName(SHEETS.MEMBERSHIPS).getDataRange().getValues().slice(1);
+
+  // Determine which participantIds are in scope
+  let scopedIds = null;
+  if (groupName) {
+    scopedIds = new Set(
+      memberData.filter(r => r[2] === groupName).map(r => r[1])
+    );
+  }
+
+  const nameMap = {};
+  partData.forEach(r => {
+    if (!scopedIds || scopedIds.has(r[0])) nameMap[r[0]] = r[1];
+  });
+
+  // Load completed matches with scores
+  const matchData = ss.getSheetByName(SHEETS.MATCHES).getDataRange().getValues().slice(1);
+  const matchMap = {};
+  matchData.forEach(r => {
+    if (r[9] === 'Completed' && r[7] !== '' && r[8] !== '') {
+      matchMap[r[0]] = {
+        homeScore: Number(r[7]),
+        awayScore: Number(r[8]),
+        stage:     r[1],
+      };
+    }
+  });
+
+  // Tally scores per participant
+  const scores = {};
+  Object.keys(nameMap).forEach(id => { scores[id] = 0; });
+
+  const predData = ss.getSheetByName(SHEETS.PREDICTIONS).getDataRange().getValues().slice(1);
+  predData.forEach(r => {
+    const pid = r[1], mid = r[2];
+    if (!nameMap[pid]) return;
+    const match = matchMap[mid];
+    if (!match) return;
+
+    const predHome = Number(r[3]), predAway = Number(r[4]);
+    const isKnockout = match.stage && match.stage.toLowerCase().indexOf('group') === -1;
+    const mult = isKnockout ? SCORING.KNOCKOUT_MULT : 1;
+
+    if (predHome === match.homeScore && predAway === match.awayScore) {
+      scores[pid] += SCORING.CORRECT_SCORE * mult;
+    } else {
+      const predResult = Math.sign(predHome - predAway);
+      const realResult = Math.sign(match.homeScore - match.awayScore);
+      if (predResult === realResult) scores[pid] += SCORING.CORRECT_RESULT * mult;
+    }
+  });
+
+  // Build participantId → groups map
+  const groupsMap = {};
+  memberData.forEach(r => {
+    if (!groupsMap[r[1]]) groupsMap[r[1]] = [];
+    groupsMap[r[1]].push(r[2]);
+  });
+
+  // Sort and rank
+  const ranked = Object.keys(scores)
+    .map(id => ({ id, name: nameMap[id], score: scores[id], groups: groupsMap[id] || [] }))
+    .sort((a, b) => b.score - a.score);
+
+  let rank = 1;
+  ranked.forEach((entry, i) => {
+    if (i > 0 && ranked[i - 1].score > entry.score) rank = i + 1;
+    entry.rank = rank;
+  });
+
+  return ranked;
+}
+
+function getGroupNames() {
+  const data = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName(SHEETS.GROUPS).getDataRange().getValues().slice(1);
+  return data.map(r => r[1]);
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+
+function _resolveInviteCode(inviteCode) {
+  const groups = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName(SHEETS.GROUPS).getDataRange().getValues();
+  for (let i = 1; i < groups.length; i++) {
+    if (groups[i][0].toString().toUpperCase() === inviteCode.toUpperCase())
+      return groups[i][1];
+  }
+  return null;
+}
+
+function _getGroupsForParticipant(participantId) {
+  const data = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName(SHEETS.MEMBERSHIPS).getDataRange().getValues();
+  const groups = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === participantId) groups.push(data[i][2]);
+  }
+  return groups;
 }
 
 function debugMatches() {
