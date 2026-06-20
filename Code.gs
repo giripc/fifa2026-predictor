@@ -1,11 +1,13 @@
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('⚽ FIFA Predictor')
-    .addItem('1 · Setup Sheets',    'setupSheets')
-    .addItem('2 · Fetch Matches',   'fetchMatches')
+    .addItem('1 · Setup Sheets',          'setupSheets')
+    .addItem('2 · Fetch Matches',         'fetchMatches')
     .addSeparator()
-    .addItem('Add Participant',     'showAddParticipantDialog')
-    .addItem('Submit Prediction',   'showPredictionDialog')
+    .addItem('Migrate to Multi-Group',    'migratePoolGroupToMemberships')
+    .addSeparator()
+    .addItem('Add Participant',           'showAddParticipantDialog')
+    .addItem('Submit Prediction',         'showPredictionDialog')
     .addToUi();
 }
 
