@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>⚽ FIFA 2026 Predictor</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',sans-serif;background:#0a1628;color:#eee;min-height:100vh;padding:24px 20px}
+    .page-header{text-align:center;margin-bottom:28px}
+    .page-header h1{color:#f0c030;font-size:1.8rem;margin-bottom:4px}
+    .page-header .sub{color:#aaa;font-size:.9rem}
+
+    /* Auth card — centered, narrow */
+    .auth-wrap{display:flex;justify-content:center}
+    .card{background:#122040;border-radius:12px;padding:28px;width:100%;max-width:460px}
+    label{display:block;margin-top:14px;font-size:.85rem;color:#bbb}
+    input{width:100%;padding:10px;margin-top:4px;border:1px solid #2a4070;border-radius:6px;background:#0d1f3c;color:#eee;font-size:.95rem}
+    input:focus{outline:none;border-color:#f0c030}
+    .btn{margin-top:20px;width:100%;padding:11px;background:#f0c030;color:#0a1628;font-weight:bold;font-size:1rem;border:none;border-radius:6px;cursor:pointer}
+    .btn:hover{background:#f5d060}
+    .btn-sec{background:#1e3a6e;color:#eee;margin-top:10px}
+    .btn-sec:hover{background:#2a4e8c}
+    .error{color:#f87171;font-size:.85rem;margin-top:10px}
+    .success{color:#6ee7b7;font-size:.85rem;margin-top:10px}
+    .hidden{display:none}
+
+    /* Predict layout */
+    #stepPredict{width:100%}
+    .predict-header{display:flex;justify-content:space-between;align-items:center;
+      background:#122040;border-radius:10px;padding:14px 20px;margin-bottom:24px;flex-wrap:wrap;gap:10px}
+    .predict-header .welcome{color:#6ee7b7;font-size:1rem;font-weight:bold}
+    .predict-header .sub{color:#aaa;font-size:.82rem}
+
+    .stage-header{color:#f0c030;font-size:.82rem;font-weight:bold;
+      text-transform:uppercase;letter-spacing:.08em;
+      margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid #2a4070}
+
+    /* Grid */
+    .match-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+
+    .match-card{background:#122040;border:1px solid #2a4070;border-radius:10px;padding:16px;
+      display:flex;flex-direction:column;gap:10px;transition:border-color .2s}
+    .match-card:hover{border-color:#f0c030}
+    .match-meta{font-size:.75rem;color:#888}
+    .match-teams{font-size:.95rem;font-weight:bold;color:#fff;display:flex;
+      justify-content:space-between;align-items:center;gap:6px}
+    .match-teams .team{flex:1;text-align:center}
+    .match-teams .vs{color:#555;font-size:.8rem;flex:none}
+    .score-row{display:flex;align-items:center;gap:8px;justify-content:center}
+    .score-row input{text-align:center;font-size:1.1rem;font-weight:bold;
+      width:52px;padding:8px 4px;border:1px solid #2a4070;border-radius:6px;
+      background:#0d1f3c;color:#f0c030}
+    .score-row input:focus{outline:none;border-color:#f0c030}
+    .score-row .dash{color:#555;font-size:1rem}
+    .save-btn{padding:7px 16px;background:#1e3a6e;color:#eee;border:none;
+      border-radius:6px;cursor:pointer;font-size:.85rem;white-space:nowrap}
+    .save-btn:hover{background:#f0c030;color:#0a1628}
+    .save-btn:disabled{opacity:.5;cursor:default}
+    .status-line{font-size:.75rem;min-height:16px;color:#6ee7b7;text-align:center}
+    .status-line.err{color:#f87171}
+
+    #loading{text-align:center;padding:40px;color:#aaa;font-size:1rem}
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>⚽ FIFA 2026 Predictor</h1>
+  <p class="sub">Predict scores before each match kicks off</p>
+</div>
+
+<!-- Step 1: Email -->
+<div class="auth-wrap">
+<div id="stepEmail" class="card">
+  <label>Your Email
+    <input id="email" type="email" placeholder="you@example.com"/>
+  </label>
+  <button class="btn" onclick="checkEmail()">Continue →</button>
+  <div id="emailErr" class="error"></div>
+</div>
+</div>
+
+<!-- Step 2: Register -->
+<div class="auth-wrap">
+<div id="stepRegister" class="card hidden">
+  <div class="success">New here! Fill in your details to join.</div>
+  <label>Full Name   <input id="regName" placeholder="Your name"/></label>
+  <label>Invite Code <input id="regCode" placeholder="Ask your group admin"/></label>
+  <button class="btn" onclick="register()">Join & Start Predicting →</button>
+  <button class="btn btn-sec" onclick="show('stepEmail')">← Back</button>
+  <div id="regErr" class="error"></div>
+</div>
+</div>
+
+<!-- Step 3: Predict -->
+<div id="stepPredict" class="hidden">
+  <div class="predict-header">
+    <div>
+      <div id="welcomeMsg" class="welcome"></div>
+      <div class="sub">Save your predictions before kickoff</div>
+    </div>
+  </div>
+  <div id="loading">Loading matches…</div>
+  <div id="matchList"></div>
+</div>
+
+<script>
+  var participant = null;
+
+  function show(id) {
+    ['stepEmail','stepRegister','stepPredict'].forEach(function(s) {
+      document.getElementById(s).classList.add('hidden');
+    });
+    document.getElementById(id).classList.remove('hidden');
+  }
+
+  function checkEmail() {
+    var email = document.getElementById('email').value.trim();
+    if (!email) { document.getElementById('emailErr').textContent = 'Please enter your email.'; return; }
+    document.getElementById('emailErr').textContent = 'Checking…';
+    google.script.run
+      .withSuccessHandler(function(p) {
+        document.getElementById('emailErr').textContent = '';
+        if (p) { participant = p; showPredict(); }
+        else   { show('stepRegister'); }
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('emailErr').textContent = e.message;
+      })
+      .lookupParticipant(email);
+  }
+
+  function register() {
+    var name  = document.getElementById('regName').value.trim();
+    var code  = document.getElementById('regCode').value.trim();
+    var email = document.getElementById('email').value.trim();
+    if (!name || !code) { document.getElementById('regErr').textContent = 'All fields required.'; return; }
+    document.getElementById('regErr').textContent = 'Registering…';
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r.error) { document.getElementById('regErr').textContent = r.error; return; }
+        google.script.run
+          .withSuccessHandler(function(p) { participant = p; showPredict(); })
+          .lookupParticipant(email);
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('regErr').textContent = e.message;
+      })
+      .registerParticipant(name, email, code);
+  }
+
+  function showPredict() {
+    show('stepPredict');
+    document.getElementById('welcomeMsg').textContent =
+      'Welcome, ' + participant.name + '! 👋  Group: ' + participant.group;
+    google.script.run
+      .withSuccessHandler(function(matches) {
+        google.script.run
+          .withSuccessHandler(function(preds) { renderMatches(matches, preds); })
+          .getMyPredictions(participant.id);
+      })
+      .getUpcomingMatches();
+  }
+
+  function renderMatches(matches, preds) {
+    document.getElementById('loading').style.display = 'none';
+    var container = document.getElementById('matchList');
+    if (!matches.length) {
+      container.innerHTML = '<p style="color:#aaa;text-align:center;margin-top:40px;font-size:1rem">No upcoming matches available right now.</p>';
+      return;
+    }
+
+    var byStage = {};
+    var stageOrder = [];
+    matches.forEach(function(m) {
+      var s = m.stage || 'Other';
+      if (!byStage[s]) { byStage[s] = []; stageOrder.push(s); }
+      byStage[s].push(m);
+    });
+
+    var html = '';
+    stageOrder.forEach(function(stage) {
+      html += '<div class="stage-header">' + stage + '</div>';
+      html += '<div class="match-grid">';
+      byStage[stage].forEach(function(m) {
+        var d = new Date(m.date);
+        var dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
+                    + ' · ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+        var pred = preds[m.id] || {};
+        var savedTxt = preds[m.id] ? '✓ ' + pred.home + ' – ' + pred.away : '';
+        html += '<div class="match-card">'
+          + '<div class="match-meta">' + dateStr + (m.group ? ' · ' + m.group : '') + '</div>'
+          + '<div class="match-teams">'
+          +   '<span class="team">' + m.home + '</span>'
+          +   '<span class="vs">vs</span>'
+          +   '<span class="team">' + m.away + '</span>'
+          + '</div>'
+          + '<div class="score-row">'
+          +   '<input id="h_' + m.id + '" type="number" min="0" max="20" value="' + (pred.home !== undefined ? pred.home : '') + '" placeholder="0"/>'
+          +   '<span class="dash">–</span>'
+          +   '<input id="a_' + m.id + '" type="number" min="0" max="20" value="' + (pred.away !== undefined ? pred.away : '') + '" placeholder="0"/>'
+          +   '<button class="save-btn" onclick="savePred(\'' + m.id + '\',this)">Save</button>'
+          + '</div>'
+          + '<div id="status_' + m.id + '" class="status-line">' + savedTxt + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  function savePred(matchId, btn) {
+    var h = parseInt(document.getElementById('h_' + matchId).value);
+    var a = parseInt(document.getElementById('a_' + matchId).value);
+    var statusEl = document.getElementById('status_' + matchId);
+    if (isNaN(h) || isNaN(a)) {
+      statusEl.className = 'status-line err';
+      statusEl.textContent = 'Enter both scores.';
+      return;
+    }
+    btn.disabled = true; btn.textContent = '…';
+    google.script.run
+      .withSuccessHandler(function() {
+        btn.disabled = false; btn.textContent = 'Save';
+        statusEl.className = 'status-line';
+        statusEl.textContent = '✓ Saved: ' + h + ' – ' + a;
+      })
+      .withFailureHandler(function(e) {
+        btn.disabled = false; btn.textContent = 'Save';
+        statusEl.className = 'status-line err';
+        statusEl.textContent = e.message;
+      })
+      .submitPrediction(participant.id, matchId, h, a);
+  }
+</script>
+</body>
+</html>
