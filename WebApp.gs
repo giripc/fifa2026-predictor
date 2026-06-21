@@ -148,16 +148,26 @@ function getLeaderboard(groupName, participantId) {
     }
   });
 
-  // Tally scores per participant
+  // Tally scores per participant with breakdown
   const scores = {};
-  Object.keys(nameMap).forEach(id => { scores[id] = 0; });
+  const breakdown = {};
+  Object.keys(nameMap).forEach(id => {
+    scores[id] = 0;
+    breakdown[id] = { exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
+  });
 
+  const completedMatchIds = Object.keys(matchMap);
   const predData = ss.getSheetByName(SHEETS.PREDICTIONS).getDataRange().getValues().slice(1);
+
+  // Track which matches each participant predicted
+  const predictedMatches = {};
   predData.forEach(r => {
-    const pid = r[1], mid = r[2];
+    const pid = r[1], mid = String(r[2]);
     if (!nameMap[pid]) return;
     const match = matchMap[mid];
     if (!match) return;
+    if (!predictedMatches[pid]) predictedMatches[pid] = new Set();
+    predictedMatches[pid].add(mid);
 
     const predHome = Number(r[3]), predAway = Number(r[4]);
     const isKnockout = match.stage && match.stage.toLowerCase().indexOf('group') === -1;
@@ -165,11 +175,25 @@ function getLeaderboard(groupName, participantId) {
 
     if (predHome === match.homeScore && predAway === match.awayScore) {
       scores[pid] += SCORING.CORRECT_SCORE * mult;
+      breakdown[pid].exactScore++;
     } else {
       const predResult = Math.sign(predHome - predAway);
       const realResult = Math.sign(match.homeScore - match.awayScore);
-      if (predResult === realResult) scores[pid] += SCORING.CORRECT_RESULT * mult;
+      if (predResult === realResult) {
+        scores[pid] += SCORING.CORRECT_RESULT * mult;
+        breakdown[pid].correctResult++;
+      } else {
+        breakdown[pid].incorrect++;
+      }
     }
+  });
+
+  // Count missed predictions (completed matches with no prediction)
+  Object.keys(nameMap).forEach(pid => {
+    const predicted = predictedMatches[pid] || new Set();
+    completedMatchIds.forEach(mid => {
+      if (!predicted.has(mid)) breakdown[pid].noPrediction++;
+    });
   });
 
   // Build participantId → groups map
@@ -181,7 +205,7 @@ function getLeaderboard(groupName, participantId) {
 
   // Sort and rank
   const ranked = Object.keys(scores)
-    .map(id => ({ id, name: nameMap[id], score: scores[id], groups: groupsMap[id] || [] }))
+    .map(id => ({ id, name: nameMap[id], score: scores[id], groups: groupsMap[id] || [], breakdown: breakdown[id] }))
     .sort((a, b) => b.score - a.score);
 
   let rank = 1;

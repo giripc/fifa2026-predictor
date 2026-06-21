@@ -82,6 +82,16 @@
     .rank-3{color:#cd7f32;font-weight:bold}
     .score-pts{font-weight:bold;color:#6ee7b7}
     .highlight-me td{background:#0d2545 !important}
+    .lb-table tr.breakdown-row td{background:#0a1628;padding:6px 14px 10px 40px;border-bottom:1px solid #1a2f55}
+    .lb-table tr.breakdown-row:hover td{background:#0a1628}
+    .breakdown-chips{display:flex;flex-wrap:wrap;gap:6px}
+    .chip{font-size:.75rem;padding:3px 10px;border-radius:20px;font-weight:500}
+    .chip-exact{background:#14532d;color:#6ee7b7}
+    .chip-result{background:#1e3a6e;color:#93c5fd}
+    .chip-wrong{background:#3b1515;color:#f87171}
+    .chip-miss{background:#2a2a2a;color:#888}
+    .lb-name-btn{background:none;border:none;color:inherit;cursor:pointer;text-align:left;font-size:inherit;padding:0}
+    .lb-name-btn:hover{text-decoration:underline}
 
     #loading{text-align:center;padding:40px;color:#aaa;font-size:1rem}
   </style>
@@ -377,6 +387,11 @@
       .submitPrediction(participant.id, matchId, h, a);
   }
 
+  function toggleBreakdown(id) {
+    var row = document.getElementById(id);
+    row.style.display = row.style.display === 'none' ? '' : 'none';
+  }
+
   // ── Leaderboard ─────────────────────────────────────────────
 
   function populateGroupSelect() {
@@ -410,17 +425,36 @@
         }
         var tbody = document.getElementById('lbBody');
         tbody.innerHTML = '';
-        rows.forEach(function(r) {
+        rows.forEach(function(r, idx) {
           var rankClass = r.rank === 1 ? 'rank-1' : r.rank === 2 ? 'rank-2' : r.rank === 3 ? 'rank-3' : '';
           var isMe = r.id === participant.id;
+          var bdId = 'bd_' + idx;
+
+          // Main row
           var tr = document.createElement('tr');
           if (isMe) tr.className = 'highlight-me';
-          var groupsCell = '';
           tr.innerHTML = '<td class="' + rankClass + '">' + r.rank + '</td>'
-            + '<td>' + r.name + (isMe ? ' <span style="color:#f0c030;font-size:.75rem">(you)</span>' : '') + '</td>'
-            + groupsCell
+            + '<td><button class="lb-name-btn" onclick="toggleBreakdown(\'' + bdId + '\')">'
+            + r.name + (isMe ? ' <span style="color:#f0c030;font-size:.75rem">(you)</span>' : '')
+            + ' <span style="color:#555;font-size:.7rem">▾</span></button></td>'
             + '<td class="score-pts">' + r.score + '</td>';
           tbody.appendChild(tr);
+
+          // Breakdown row (hidden by default)
+          var bd = r.breakdown || {};
+          var chips = '';
+          if (bd.exactScore)     chips += '<span class="chip chip-exact">🎯 Exact score ×' + bd.exactScore + '</span>';
+          if (bd.correctResult)  chips += '<span class="chip chip-result">✅ Correct result ×' + bd.correctResult + '</span>';
+          if (bd.incorrect)      chips += '<span class="chip chip-wrong">❌ Wrong prediction ×' + bd.incorrect + '</span>';
+          if (bd.noPrediction)   chips += '<span class="chip chip-miss">— No prediction ×' + bd.noPrediction + '</span>';
+          if (!chips)            chips  = '<span class="chip chip-miss">No completed matches yet</span>';
+
+          var trBd = document.createElement('tr');
+          trBd.className = 'breakdown-row';
+          trBd.id = bdId;
+          trBd.style.display = 'none';
+          trBd.innerHTML = '<td colspan="3"><div class="breakdown-chips">' + chips + '</div></td>';
+          tbody.appendChild(trBd);
         });
         document.getElementById('lbTable').classList.remove('hidden');
       })
