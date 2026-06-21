@@ -164,7 +164,7 @@
     <table class="lb-table hidden" id="lbTable">
       <thead>
         <tr>
-          <th>#</th><th>Name</th><th>Groups</th><th>Points</th>
+          <th>#</th><th>Name</th><th id="lbGroupsHeader">Groups</th><th>Points</th>
         </tr>
       </thead>
       <tbody id="lbBody"></tbody>
@@ -350,26 +350,31 @@
   // ── Leaderboard ─────────────────────────────────────────────
 
   function populateGroupSelect() {
-    google.script.run
-      .withSuccessHandler(function(groups) {
-        var sel = document.getElementById('lbGroupSelect');
-        groups.forEach(function(g) {
-          var opt = document.createElement('option');
-          opt.value = g; opt.textContent = g;
-          sel.appendChild(opt);
-        });
-        // Pre-select participant's first group if they're in one
-        if (participant.groups.length > 0) sel.value = participant.groups[0];
-      })
-      .getGroupNames();
+    var sel = document.getElementById('lbGroupSelect');
+    participant.groups.forEach(function(g) {
+      var opt = document.createElement('option');
+      opt.value = g; opt.textContent = g;
+      sel.appendChild(opt);
+    });
+    if (participant.groups.length > 0) sel.value = participant.groups[0];
+    loadLeaderboard();
   }
 
   function loadLeaderboard() {
     var groupName = document.getElementById('lbGroupSelect').value || null;
+    var isGlobal = !groupName;
     document.getElementById('lbLoading').classList.remove('hidden');
     document.getElementById('lbTable').classList.add('hidden');
     document.getElementById('lbEmpty').classList.add('hidden');
     lbLoaded = true;
+
+    // Show/hide Groups column based on global vs group view
+    var groupsHeader = document.getElementById('lbGroupsHeader');
+    if (isGlobal) {
+      groupsHeader.style.display = 'none';
+    } else {
+      groupsHeader.style.display = '';
+    }
 
     google.script.run
       .withSuccessHandler(function(rows) {
@@ -385,9 +390,10 @@
           var isMe = r.id === participant.id;
           var tr = document.createElement('tr');
           if (isMe) tr.className = 'highlight-me';
+          var groupsCell = isGlobal ? '' : '<td style="font-size:.78rem;color:#888">' + (r.groups ? r.groups.join(', ') : '') + '</td>';
           tr.innerHTML = '<td class="' + rankClass + '">' + r.rank + '</td>'
             + '<td>' + r.name + (isMe ? ' <span style="color:#f0c030;font-size:.75rem">(you)</span>' : '') + '</td>'
-            + '<td style="font-size:.78rem;color:#888">' + (r.groups ? r.groups.join(', ') : '') + '</td>'
+            + groupsCell
             + '<td class="score-pts">' + r.score + '</td>';
           tbody.appendChild(tr);
         });
