@@ -369,12 +369,7 @@
     lbLoaded = true;
 
     // Show/hide Groups column based on global vs group view
-    var groupsHeader = document.getElementById('lbGroupsHeader');
-    if (isGlobal) {
-      groupsHeader.style.display = 'none';
-    } else {
-      groupsHeader.style.display = '';
-    }
+    document.getElementById('lbGroupsHeader').style.display = 'none';
 
     google.script.run
       .withSuccessHandler(function(rows) {
@@ -390,7 +385,7 @@
           var isMe = r.id === participant.id;
           var tr = document.createElement('tr');
           if (isMe) tr.className = 'highlight-me';
-          var groupsCell = isGlobal ? '' : '<td style="font-size:.78rem;color:#888">' + (r.groups ? r.groups.join(', ') : '') + '</td>';
+          var groupsCell = '';
           tr.innerHTML = '<td class="' + rankClass + '">' + r.rank + '</td>'
             + '<td>' + r.name + (isMe ? ' <span style="color:#f0c030;font-size:.75rem">(you)</span>' : '') + '</td>'
             + groupsCell
@@ -402,7 +397,7 @@
       .withFailureHandler(function(e) {
         document.getElementById('lbLoading').textContent = 'Error: ' + e.message;
       })
-      .getLeaderboard(groupName);
+      .getLeaderboard(groupName, participant.id);
   }
 </script>
 </body>

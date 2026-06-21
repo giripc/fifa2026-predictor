@@ -101,7 +101,7 @@ function submitPrediction(participantId, matchId, predHome, predAway) {
  * Returns ranked leaderboard entries.
  * groupName: null → global (all groups), string → filter to that group.
  */
-function getLeaderboard(groupName) {
+function getLeaderboard(groupName, participantId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   // Build participantId → name map (and optional group filter)
@@ -113,6 +113,12 @@ function getLeaderboard(groupName) {
   if (groupName) {
     scopedIds = new Set(
       memberData.filter(r => r[2] === groupName).map(r => r[1])
+    );
+  } else if (participantId) {
+    // Global view: limit to participants sharing at least one group with the current user
+    const userGroups = new Set(_getGroupsForParticipant(participantId));
+    scopedIds = new Set(
+      memberData.filter(r => userGroups.has(r[2])).map(r => r[1])
     );
   }
 
