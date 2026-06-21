@@ -93,5 +93,20 @@ function _desc(field) {
 }
 
 function _status(s) {
-  return { 0:'Upcoming', 1:'Live', 3:'Completed', 5:'Postponed' }[s] || String(s || '');
+  return { 0:'Completed', 1:'Upcoming', 3:'Live', 5:'Postponed' }[s] || String(s || '');
+}
+
+function debugMatchStatuses() {
+  var url = FIFA.BASE + '/calendar/matches'
+    + '?idCompetition=' + FIFA.COMPETITION
+    + '&idSeason=' + FIFA.SEASON
+    + '&count=500&language=en&timeZoneOffset=0';
+  var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  var matches = JSON.parse(resp.getContentText()).Results || [];
+  var statusCounts = {};
+  matches.forEach(function(m) {
+    var s = String(m.MatchStatus);
+    statusCounts[s] = (statusCounts[s] || 0) + 1;
+  });
+  Logger.log('Status code counts: ' + JSON.stringify(statusCounts));
 }
