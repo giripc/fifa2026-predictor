@@ -49,15 +49,19 @@ function fetchMatches() {
     ];
   });
 
-  // Only keep matches with kickoff strictly in the future
-  var rows = allRows.filter(function(r) {
-    return r[4] && new Date(r[4]) > now;
-  });
+  // Keep all valid matches (past and future) so completed scores are available for leaderboard
+  var rows = allRows.filter(function(r) { return r[4]; });
 
   if (rows.length)
     sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
 
-  SpreadsheetApp.getUi().alert('✅ Loaded ' + rows.length + ' upcoming matches.');
+  var completed = rows.filter(function(r) { return r[9] === 'Completed'; }).length;
+  var upcoming  = rows.filter(function(r) { return new Date(r[4]) > now; }).length;
+  SpreadsheetApp.getUi().alert(
+    '✅ Loaded ' + rows.length + ' matches\n' +
+    '   • ' + upcoming  + ' upcoming\n' +
+    '   • ' + completed + ' completed (used for leaderboard)'
+  );
 }
 
 function debugFifaApi() {
