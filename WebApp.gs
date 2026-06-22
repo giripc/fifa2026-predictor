@@ -144,6 +144,7 @@ function getLeaderboard(groupName, participantId) {
         homeScore: Number(r[7]),
         awayScore: Number(r[8]),
         stage:     r[1],
+        group:     r[3],
       };
     }
   });
@@ -170,7 +171,8 @@ function getLeaderboard(groupName, participantId) {
     predictedMatches[pid].add(mid);
 
     const predHome = Number(r[3]), predAway = Number(r[4]);
-    const isKnockout = match.stage && match.stage.toLowerCase().indexOf('group') === -1;
+    // Group-stage matches have a non-empty GroupName (e.g. "Group A"); knockout matches don't
+    const isKnockout = !match.group;
     const mult = isKnockout ? SCORING.KNOCKOUT_MULT : 1;
 
     if (predHome === match.homeScore && predAway === match.awayScore) {
