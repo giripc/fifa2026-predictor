@@ -72,8 +72,8 @@ function getUpcomingMatches() {
         awayScore: isCompleted || isLive ? r[8] : null,
         status: isCompleted ? 'completed' : isLive ? 'live' : isUpcoming ? 'upcoming' : 'started'
       };
-    })
-    .filter(function(m) { return m.status !== 'started'; });
+    });
+  // 'started' matches (past kickoff but not yet marked Live/Completed) are shown locked
 }
 
 function getMyPredictions(participantId) {
@@ -87,6 +87,24 @@ function getMyPredictions(participantId) {
 }
 
 function submitPrediction(participantId, matchId, predHome, predAway) {
+  // Server-side cutoff check — reject if match is within 1 hour of kickoff or already started
+  const matchData = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName(SHEETS.MATCHES).getDataRange().getValues();
+  const matchRow = matchData.slice(1).find(r => String(r[0]) === String(matchId));
+  if (!matchRow) return { error: 'Match not found.' };
+
+  const kickoff = new Date(matchRow[4]);
+  const status  = matchRow[9] ? String(matchRow[9]) : '';
+  const now     = new Date();
+  const cutoffMs = 60 * 60 * 1000;
+
+  if (status === 'Completed' || status === 'Live') {
+    return { error: 'Predictions are locked — match has already started or finished.' };
+  }
+  if ((kickoff - now) <= cutoffMs) {
+    return { error: 'Predictions are locked — less than 1 hour to kickoff.' };
+  }
+
   const sheet = SpreadsheetApp.getActiveSpreadsheet()
     .getSheetByName(SHEETS.PREDICTIONS);
   const data  = sheet.getDataRange().getValues();

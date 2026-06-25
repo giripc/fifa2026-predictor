@@ -198,6 +198,30 @@
   var lbLoaded = false;
   var lbCache = null; // { rows, stages }
 
+  // ── Session timeout (40 min inactivity) ─────────────────────
+  var SESSION_TIMEOUT_MS = 40 * 60 * 1000;
+  var sessionTimer = null;
+
+  function resetSessionTimer() {
+    clearTimeout(sessionTimer);
+    sessionTimer = setTimeout(expireSession, SESSION_TIMEOUT_MS);
+  }
+
+  function expireSession() {
+    participant = null;
+    matchesLoaded = false;
+    lbLoaded = false;
+    lbCache = null;
+    document.getElementById('email').value = '';
+    document.getElementById('emailErr').textContent = 'Your session expired. Please re-enter your email.';
+    showStep('stepEmail');
+  }
+
+  // Reset timer on any user interaction
+  ['click','keydown','touchstart'].forEach(function(evt) {
+    document.addEventListener(evt, resetSessionTimer, { passive: true });
+  });
+
   // ── Navigation ──────────────────────────────────────────────
 
   function showStep(id) {
@@ -210,6 +234,7 @@
   function showApp() {
     showStep('stepApp');
     refreshGroupBadges();
+    resetSessionTimer();
   }
 
   function switchTab(tab) {
@@ -326,9 +351,10 @@
 
         var scoreRow, statusLine;
 
+        var isStarted = m.status === 'started';
+        var predTxt = preds[m.id] ? 'Your prediction: ' + pred.home + ' – ' + pred.away : 'No prediction submitted';
+
         if (isCompleted) {
-          // Show actual score on left, predicted score on right, save disabled
-          var predTxt = preds[m.id] ? 'Your prediction: ' + pred.home + ' – ' + pred.away : 'No prediction submitted';
           scoreRow = '<div class="score-row">'
             + '<input type="number" value="' + m.homeScore + '" disabled style="opacity:.7"/>'
             + '<span class="dash">–</span>'
@@ -337,15 +363,22 @@
             + '</div>';
           statusLine = '<div class="status-line" style="color:#aaa">' + predTxt + '</div>';
         } else if (isLive) {
-          // Show 0-0 or current score, indicate live
           scoreRow = '<div class="score-row">'
             + '<input type="number" value="' + (m.homeScore !== null ? m.homeScore : 0) + '" disabled style="opacity:.7"/>'
             + '<span class="dash">–</span>'
             + '<input type="number" value="' + (m.awayScore !== null ? m.awayScore : 0) + '" disabled style="opacity:.7"/>'
             + '<button class="save-btn" disabled style="opacity:.4">Locked</button>'
             + '</div>';
-          var livePredTxt = preds[m.id] ? 'Your prediction: ' + pred.home + ' – ' + pred.away : 'No prediction submitted';
-          statusLine = '<div class="status-line"><span style="color:#f87171;font-weight:bold">● LIVE</span> &nbsp;' + livePredTxt + '</div>';
+          statusLine = '<div class="status-line"><span style="color:#f87171;font-weight:bold">● LIVE</span> &nbsp;' + predTxt + '</div>';
+        } else if (isStarted) {
+          // Kicked off but not yet marked Live — lock predictions
+          scoreRow = '<div class="score-row">'
+            + '<input type="number" value="' + (pred.home !== undefined ? pred.home : '–') + '" disabled style="opacity:.7"/>'
+            + '<span class="dash">–</span>'
+            + '<input type="number" value="' + (pred.away !== undefined ? pred.away : '–') + '" disabled style="opacity:.7"/>'
+            + '<button class="save-btn" disabled style="opacity:.4">Locked</button>'
+            + '</div>';
+          statusLine = '<div class="status-line" style="color:#f0c030">⏳ In progress &nbsp; ' + predTxt + '</div>';
         } else {
           // Upcoming — editable
           var savedTxt = preds[m.id] ? '✓ ' + pred.home + ' – ' + pred.away : '';
@@ -358,8 +391,12 @@
           statusLine = '<div id="status_' + m.id + '" class="status-line">' + savedTxt + '</div>';
         }
 
+        var metaStatus = isCompleted ? ' · <span style="color:#6ee7b7">Final</span>'
+          : isLive     ? ' · <span style="color:#f87171">● Live</span>'
+          : isStarted  ? ' · <span style="color:#f0c030">⏳ In progress</span>'
+          : '';
         html += '<div class="match-card">'
-          + '<div class="match-meta">' + dateStr + (m.group ? ' · ' + m.group : '') + (isCompleted ? ' · <span style="color:#6ee7b7">Final</span>' : '') + '</div>'
+          + '<div class="match-meta">' + dateStr + (m.group ? ' · ' + m.group : '') + metaStatus + '</div>'
           + '<div class="match-teams"><span class="team">' + m.home + '</span>'
           + '<span class="vs">vs</span><span class="team">' + m.away + '</span></div>'
           + scoreRow
@@ -382,10 +419,16 @@
     }
     btn.disabled = true; btn.textContent = '…';
     google.script.run
-      .withSuccessHandler(function() {
+      .withSuccessHandler(function(r) {
         btn.disabled = false; btn.textContent = 'Save';
-        statusEl.className = 'status-line';
-        statusEl.textContent = '✓ Saved: ' + h + ' – ' + a;
+        if (r.error) {
+          statusEl.className = 'status-line err';
+          statusEl.textContent = r.error;
+          btn.disabled = true; btn.textContent = 'Locked';
+        } else {
+          statusEl.className = 'status-line';
+          statusEl.textContent = '✓ Saved: ' + h + ' – ' + a;
+        }
       })
       .withFailureHandler(function(e) {
         btn.disabled = false; btn.textContent = 'Save';
