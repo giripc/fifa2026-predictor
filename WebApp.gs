@@ -105,8 +105,20 @@ function submitPrediction(participantId, matchId, predHome, predAway) {
 
 // ── Leaderboard ──────────────────────────────────────────────
 
+const STAGE_ORDER = [
+  'First Stage', 'Round of 32', 'Round of 16',
+  'Quarter-final', 'Semi-final', 'Play-off for third place', 'Final'
+];
+
+function _stageIndex(s) {
+  const i = STAGE_ORDER.indexOf(s);
+  return i === -1 ? 99 : i;
+}
+
 /**
- * Returns ranked leaderboard entries.
+ * Returns { rows, stages } where rows are ranked leaderboard entries
+ * (each with per-stage stageScores map) and stages is the ordered list
+ * of stages that have completed matches.
  * groupName: null → global (all groups), string → filter to that group.
  */
 function getLeaderboard(groupName, participantId) {
@@ -143,22 +155,43 @@ function getLeaderboard(groupName, participantId) {
       matchMap[r[0]] = {
         homeScore: Number(r[7]),
         awayScore: Number(r[8]),
-        stage:     r[1],
+        stage:     r[1] || 'Other',
         group:     r[3],
       };
     }
   });
 
-  // Tally scores per participant with breakdown
+  // Collect stages present in completed matches, sorted canonically
+  const stageSet = new Set();
+  Object.values(matchMap).forEach(m => stageSet.add(m.stage));
+  const stages = [...stageSet].sort((a, b) => _stageIndex(a) - _stageIndex(b));
+
+  // Build stage → [matchId] map for missed-prediction counting
+  const stageMatchIds = {};
+  Object.keys(matchMap).forEach(mid => {
+    const stage = matchMap[mid].stage;
+    if (!stageMatchIds[stage]) stageMatchIds[stage] = [];
+    stageMatchIds[stage].push(mid);
+  });
+
+  // Tally scores per participant with overall and per-stage breakdown
   const scores = {};
   const breakdown = {};
+  const stageScores = {};
   Object.keys(nameMap).forEach(id => {
     scores[id] = 0;
     breakdown[id] = { exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
+    stageScores[id] = {};
   });
 
   const completedMatchIds = Object.keys(matchMap);
   const predData = ss.getSheetByName(SHEETS.PREDICTIONS).getDataRange().getValues().slice(1);
+
+  function _ensureStage(pid, stage) {
+    if (!stageScores[pid][stage]) {
+      stageScores[pid][stage] = { score: 0, exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
+    }
+  }
 
   // Track which matches each participant predicted
   const predictedMatches = {};
@@ -174,27 +207,39 @@ function getLeaderboard(groupName, participantId) {
     // Group-stage matches have a non-empty GroupName (e.g. "Group A"); knockout matches don't
     const isKnockout = !match.group;
     const mult = isKnockout ? SCORING.KNOCKOUT_MULT : 1;
+    const stage = match.stage;
+    _ensureStage(pid, stage);
 
     if (predHome === match.homeScore && predAway === match.awayScore) {
       scores[pid] += SCORING.CORRECT_SCORE * mult;
       breakdown[pid].exactScore++;
+      stageScores[pid][stage].score += SCORING.CORRECT_SCORE * mult;
+      stageScores[pid][stage].exactScore++;
     } else {
       const predResult = Math.sign(predHome - predAway);
       const realResult = Math.sign(match.homeScore - match.awayScore);
       if (predResult === realResult) {
         scores[pid] += SCORING.CORRECT_RESULT * mult;
         breakdown[pid].correctResult++;
+        stageScores[pid][stage].score += SCORING.CORRECT_RESULT * mult;
+        stageScores[pid][stage].correctResult++;
       } else {
         breakdown[pid].incorrect++;
+        stageScores[pid][stage].incorrect++;
       }
     }
   });
 
-  // Count missed predictions (completed matches with no prediction)
+  // Count missed predictions overall and per stage
   Object.keys(nameMap).forEach(pid => {
     const predicted = predictedMatches[pid] || new Set();
     completedMatchIds.forEach(mid => {
-      if (!predicted.has(mid)) breakdown[pid].noPrediction++;
+      if (!predicted.has(mid)) {
+        breakdown[pid].noPrediction++;
+        const stage = matchMap[mid].stage;
+        _ensureStage(pid, stage);
+        stageScores[pid][stage].noPrediction++;
+      }
     });
   });
 
@@ -207,7 +252,12 @@ function getLeaderboard(groupName, participantId) {
 
   // Sort and rank
   const ranked = Object.keys(scores)
-    .map(id => ({ id, name: nameMap[id], score: scores[id], groups: groupsMap[id] || [], breakdown: breakdown[id] }))
+    .map(id => ({
+      id, name: nameMap[id], score: scores[id],
+      groups: groupsMap[id] || [],
+      breakdown: breakdown[id],
+      stageScores: stageScores[id],
+    }))
     .sort((a, b) => b.score - a.score);
 
   let rank = 1;
@@ -216,7 +266,7 @@ function getLeaderboard(groupName, participantId) {
     entry.rank = rank;
   });
 
-  return ranked;
+  return { rows: ranked, stages: stages };
 }
 
 function getGroupNames() {

@@ -72,6 +72,8 @@
     .lb-controls{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
     .lb-controls label{margin:0;font-size:.85rem;color:#bbb}
     .lb-controls select{width:auto;min-width:180px}
+    .lb-stage-badge{display:inline-block;background:#1a3060;color:#f0c030;font-size:.72rem;
+      font-weight:bold;padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle}
     .lb-table{width:100%;border-collapse:collapse;font-size:.9rem}
     .lb-table th{background:#1a3060;color:#f0c030;padding:10px 14px;text-align:left;
       font-size:.78rem;text-transform:uppercase;letter-spacing:.05em}
@@ -169,12 +171,17 @@
           <option value="">🌍 Global (all groups)</option>
         </select>
       </label>
+      <label>Stage
+        <select id="lbStageSelect" onchange="renderLeaderboard()">
+          <option value="">📊 Cumulative</option>
+        </select>
+      </label>
     </div>
     <div id="lbLoading" style="text-align:center;padding:40px;color:#aaa">Loading…</div>
     <table class="lb-table hidden" id="lbTable">
       <thead>
         <tr>
-          <th>#</th><th>Name</th><th id="lbGroupsHeader">Groups</th><th>Points</th>
+          <th>#</th><th>Name</th><th>Points</th>
         </tr>
       </thead>
       <tbody id="lbBody"></tbody>
@@ -189,6 +196,7 @@
   var participant = null;
   var matchesLoaded = false;
   var lbLoaded = false;
+  var lbCache = null; // { rows, stages }
 
   // ── Navigation ──────────────────────────────────────────────
 
@@ -407,61 +415,97 @@
 
   function loadLeaderboard() {
     var groupName = document.getElementById('lbGroupSelect').value || null;
-    var isGlobal = !groupName;
     document.getElementById('lbLoading').classList.remove('hidden');
     document.getElementById('lbTable').classList.add('hidden');
     document.getElementById('lbEmpty').classList.add('hidden');
     lbLoaded = true;
-
-    // Show/hide Groups column based on global vs group view
-    document.getElementById('lbGroupsHeader').style.display = 'none';
+    lbCache = null;
 
     google.script.run
-      .withSuccessHandler(function(rows) {
-        document.getElementById('lbLoading').classList.add('hidden');
-        if (!rows.length) {
-          document.getElementById('lbEmpty').classList.remove('hidden');
-          return;
-        }
-        var tbody = document.getElementById('lbBody');
-        tbody.innerHTML = '';
-        rows.forEach(function(r, idx) {
-          var rankClass = r.rank === 1 ? 'rank-1' : r.rank === 2 ? 'rank-2' : r.rank === 3 ? 'rank-3' : '';
-          var isMe = r.id === participant.id;
-          var bdId = 'bd_' + idx;
-
-          // Main row
-          var tr = document.createElement('tr');
-          if (isMe) tr.className = 'highlight-me';
-          tr.innerHTML = '<td class="' + rankClass + '">' + r.rank + '</td>'
-            + '<td><button class="lb-name-btn" onclick="toggleBreakdown(\'' + bdId + '\')">'
-            + r.name + (isMe ? ' <span style="color:#f0c030;font-size:.75rem">(you)</span>' : '')
-            + ' <span style="color:#555;font-size:.7rem">▾</span></button></td>'
-            + '<td class="score-pts">' + r.score + '</td>';
-          tbody.appendChild(tr);
-
-          // Breakdown row (hidden by default)
-          var bd = r.breakdown || {};
-          var chips = '';
-          if (bd.exactScore)     chips += '<span class="chip chip-exact">🎯 Exact score ×' + bd.exactScore + '</span>';
-          if (bd.correctResult)  chips += '<span class="chip chip-result">✅ Correct result ×' + bd.correctResult + '</span>';
-          if (bd.incorrect)      chips += '<span class="chip chip-wrong">❌ Wrong prediction ×' + bd.incorrect + '</span>';
-          if (bd.noPrediction)   chips += '<span class="chip chip-miss">— No prediction ×' + bd.noPrediction + '</span>';
-          if (!chips)            chips  = '<span class="chip chip-miss">No completed matches yet</span>';
-
-          var trBd = document.createElement('tr');
-          trBd.className = 'breakdown-row';
-          trBd.id = bdId;
-          trBd.style.display = 'none';
-          trBd.innerHTML = '<td colspan="3"><div class="breakdown-chips">' + chips + '</div></td>';
-          tbody.appendChild(trBd);
+      .withSuccessHandler(function(result) {
+        lbCache = result;
+        // Rebuild stage dropdown from returned stages
+        var stageSel = document.getElementById('lbStageSelect');
+        // Remove all options except the first (Cumulative)
+        while (stageSel.options.length > 1) stageSel.remove(1);
+        (result.stages || []).forEach(function(s) {
+          var opt = document.createElement('option');
+          opt.value = s; opt.textContent = s;
+          stageSel.appendChild(opt);
         });
-        document.getElementById('lbTable').classList.remove('hidden');
+        renderLeaderboard();
       })
       .withFailureHandler(function(e) {
         document.getElementById('lbLoading').textContent = 'Error: ' + e.message;
       })
       .getLeaderboard(groupName, participant.id);
+  }
+
+  function renderLeaderboard() {
+    if (!lbCache) return;
+    var stage = document.getElementById('lbStageSelect').value || null;
+    var allRows = lbCache.rows;
+
+    document.getElementById('lbLoading').classList.add('hidden');
+    if (!allRows.length) {
+      document.getElementById('lbEmpty').classList.remove('hidden');
+      document.getElementById('lbTable').classList.add('hidden');
+      return;
+    }
+
+    // Derive display rows — for stage view re-rank by that stage's score
+    var displayRows;
+    if (stage) {
+      displayRows = allRows.map(function(r) {
+        var ss = (r.stageScores && r.stageScores[stage]) || { score: 0, exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
+        return { id: r.id, name: r.name, score: ss.score, breakdown: ss };
+      }).sort(function(a, b) { return b.score - a.score; });
+      // Re-rank
+      var rank = 1;
+      displayRows.forEach(function(row, i) {
+        if (i > 0 && displayRows[i - 1].score > row.score) rank = i + 1;
+        row.rank = rank;
+      });
+    } else {
+      displayRows = allRows;
+    }
+
+    var tbody = document.getElementById('lbBody');
+    tbody.innerHTML = '';
+    displayRows.forEach(function(r, idx) {
+      var rankClass = r.rank === 1 ? 'rank-1' : r.rank === 2 ? 'rank-2' : r.rank === 3 ? 'rank-3' : '';
+      var isMe = r.id === participant.id;
+      var bdId = 'bd_' + idx;
+
+      var stageBadge = stage ? '<span class="lb-stage-badge">' + stage + '</span>' : '';
+
+      // Main row
+      var tr = document.createElement('tr');
+      if (isMe) tr.className = 'highlight-me';
+      tr.innerHTML = '<td class="' + rankClass + '">' + r.rank + '</td>'
+        + '<td><button class="lb-name-btn" onclick="toggleBreakdown(\'' + bdId + '\')">'
+        + r.name + (isMe ? ' <span style="color:#f0c030;font-size:.75rem">(you)</span>' : '')
+        + ' <span style="color:#555;font-size:.7rem">▾</span></button></td>'
+        + '<td class="score-pts">' + r.score + stageBadge + '</td>';
+      tbody.appendChild(tr);
+
+      // Breakdown row (hidden by default)
+      var bd = r.breakdown || {};
+      var chips = '';
+      if (bd.exactScore)     chips += '<span class="chip chip-exact">🎯 Exact score ×' + bd.exactScore + '</span>';
+      if (bd.correctResult)  chips += '<span class="chip chip-result">✅ Correct result ×' + bd.correctResult + '</span>';
+      if (bd.incorrect)      chips += '<span class="chip chip-wrong">❌ Wrong prediction ×' + bd.incorrect + '</span>';
+      if (bd.noPrediction)   chips += '<span class="chip chip-miss">— No prediction ×' + bd.noPrediction + '</span>';
+      if (!chips)            chips  = '<span class="chip chip-miss">No completed matches yet</span>';
+
+      var trBd = document.createElement('tr');
+      trBd.className = 'breakdown-row';
+      trBd.id = bdId;
+      trBd.style.display = 'none';
+      trBd.innerHTML = '<td colspan="3"><div class="breakdown-chips">' + chips + '</div></td>';
+      tbody.appendChild(trBd);
+    });
+    document.getElementById('lbTable').classList.remove('hidden');
   }
 </script>
 </body>
