@@ -4,16 +4,71 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-// ── Auth ─────────────────────────────────────────────────────
+// ── OTP Auth ─────────────────────────────────────────────────
 
-function _getVerifiedEmail() {
-  const email = Session.getActiveUser().getEmail();
-  if (!email) throw new Error('Could not verify your identity. Please ensure you are signed in with your Google account.');
-  return email.toLowerCase();
+var OTP_TTL     = 10 * 60;  // 10 minutes
+var SESSION_TTL = 40 * 60;  // 40 minutes (matches client inactivity timeout)
+var OTP_RATE    =  5 * 60;  // minimum seconds between OTP requests
+
+function sendOtp(email) {
+  if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/))
+    return { error: 'Please enter a valid email address.' };
+
+  const key = email.toLowerCase();
+  const cache = CacheService.getScriptCache();
+
+  // Rate-limit: block re-requests within OTP_RATE seconds
+  if (cache.get('otp_rate_' + key))
+    return { error: 'OTP already sent. Please wait a few minutes before requesting again.' };
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  cache.put('otp_' + key, code, OTP_TTL);
+  cache.put('otp_rate_' + key, '1', OTP_RATE);
+
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: '⚽ FIFA 2026 Predictor — your sign-in code',
+      body: 'Your one-time sign-in code is: ' + code + '\n\nThis code expires in 10 minutes.'
+    });
+  } catch (e) {
+    return { error: 'Could not send email. Please try again later.' };
+  }
+  return { success: true };
 }
 
-function lookupParticipant() {
-  const email = _getVerifiedEmail();
+function verifyOtp(email, code) {
+  if (!email || !code) return { error: 'Email and code are required.' };
+  const key = email.toLowerCase();
+  const cache = CacheService.getScriptCache();
+  const stored = cache.get('otp_' + key);
+  if (!stored || stored !== code.trim())
+    return { error: 'Invalid or expired code. Please request a new one.' };
+
+  cache.remove('otp_' + key);
+  const token = Utilities.getUuid();
+  cache.put('sess_' + token, key, SESSION_TTL);
+  return { success: true, token: token };
+}
+
+function _getSessionEmail(token) {
+  if (!token) throw new Error('Session expired. Please sign in again.');
+  const email = CacheService.getScriptCache().get('sess_' + token);
+  if (!email) throw new Error('Session expired. Please sign in again.');
+  return email;
+}
+
+function refreshSession(token) {
+  if (!token) return { error: 'No session.' };
+  const cache = CacheService.getScriptCache();
+  const email = cache.get('sess_' + token);
+  if (!email) return { expired: true };
+  cache.put('sess_' + token, email, SESSION_TTL);
+  return { success: true };
+}
+
+function lookupParticipant(token) {
+  const email = _getSessionEmail(token);
   const data = SpreadsheetApp.getActiveSpreadsheet()
     .getSheetByName(SHEETS.PARTICIPANTS).getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
@@ -25,18 +80,18 @@ function lookupParticipant() {
   return null;
 }
 
-function registerParticipant(name, inviteCode) {
-  const email = _getVerifiedEmail();
+function registerParticipant(name, inviteCode, token) {
+  const email = _getSessionEmail(token);
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const groupName = _resolveInviteCode(inviteCode);
   if (!groupName) return { error: 'Invalid invite code. Please check with your group admin.' };
 
-  if (lookupParticipant()) return { error: 'Email already registered. Go back to sign in.' };
+  if (lookupParticipant(token)) return { error: 'Email already registered. Go back to sign in.' };
 
   const lock = LockService.getScriptLock();
   lock.tryLock(5000);
   try {
-    if (lookupParticipant()) return { error: 'Email already registered. Go back to sign in.' };
+    if (lookupParticipant(token)) return { error: 'Email already registered. Go back to sign in.' };
     const participantId = Utilities.getUuid();
     ss.getSheetByName(SHEETS.PARTICIPANTS)
       .appendRow([participantId, name, email, new Date().toISOString()]);
@@ -48,9 +103,8 @@ function registerParticipant(name, inviteCode) {
   }
 }
 
-function joinGroup(inviteCode) {
-  const email = _getVerifiedEmail();
-  const participant = lookupParticipant();
+function joinGroup(inviteCode, token) {
+  const participant = lookupParticipant(token);
   if (!participant) return { error: 'Participant not found. Please register first.' };
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -93,8 +147,8 @@ function getUpcomingMatches() {
   // 'started' matches (past kickoff but not yet marked Live/Completed) are shown locked
 }
 
-function getMyPredictions() {
-  const participant = lookupParticipant();
+function getMyPredictions(token) {
+  const participant = lookupParticipant(token);
   if (!participant) return {};
   const data = SpreadsheetApp.getActiveSpreadsheet()
     .getSheetByName(SHEETS.PREDICTIONS).getDataRange().getValues();
@@ -105,8 +159,8 @@ function getMyPredictions() {
   return preds;
 }
 
-function submitPrediction(matchId, predHome, predAway) {
-  const participant = lookupParticipant();
+function submitPrediction(matchId, predHome, predAway, token) {
+  const participant = lookupParticipant(token);
   if (!participant) return { error: 'Unauthorized. Please sign in.' };
   const participantId = participant.id;
 
@@ -167,8 +221,8 @@ function _stageIndex(s) {
  * of stages that have completed matches.
  * groupName: null → global (all groups), string → filter to that group.
  */
-function getLeaderboard(groupName) {
-  const participant = lookupParticipant();
+function getLeaderboard(groupName, token) {
+  const participant = lookupParticipant(token);
   const participantId = participant ? participant.id : null;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 

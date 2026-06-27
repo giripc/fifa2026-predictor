@@ -105,11 +105,26 @@
   <p class="sub">Predict scores before each match kicks off</p>
 </div>
 
-<!-- Step 1: Loading (Google identity resolved server-side) -->
+<!-- Step 1a: Email entry -->
 <div class="auth-wrap">
 <div id="stepEmail" class="card">
+  <h2 style="color:#f0c030;margin-bottom:4px">Sign In</h2>
+  <p style="color:#aaa;font-size:.85rem;margin-bottom:8px">Enter your email to receive a one-time code.</p>
+  <label>Email <input id="otpEmail" type="email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')sendOtp()"/></label>
+  <button class="btn" onclick="sendOtp()">Send Code →</button>
   <div id="emailErr" class="error"></div>
-  <div id="emailLoading" style="text-align:center;color:#aaa;padding:20px">Signing you in…</div>
+</div>
+</div>
+
+<!-- Step 1b: OTP entry -->
+<div class="auth-wrap">
+<div id="stepOtp" class="card hidden">
+  <h2 style="color:#f0c030;margin-bottom:4px">Enter Code</h2>
+  <p id="otpHint" style="color:#aaa;font-size:.85rem;margin-bottom:8px"></p>
+  <label>6-digit code <input id="otpCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456" onkeydown="if(event.key==='Enter')verifyOtp()"/></label>
+  <button class="btn" onclick="verifyOtp()">Sign In →</button>
+  <button class="btn btn-sec" onclick="showStep('stepEmail')">← Change Email</button>
+  <div id="otpErr" class="error"></div>
 </div>
 </div>
 
@@ -190,6 +205,7 @@
 
 <script>
   var participant = null;
+  var sessionToken = sessionStorage.getItem('fifa_token') || null;
   var matchesLoaded = false;
   var lbLoaded = false;
   var lbCache = null; // { rows, stages }
@@ -204,13 +220,16 @@
   }
 
   function expireSession() {
+    sessionToken = null;
+    sessionStorage.removeItem('fifa_token');
     participant = null;
     matchesLoaded = false;
     lbLoaded = false;
     lbCache = null;
-    document.getElementById('emailErr').textContent = 'Your session expired. Verifying identity…';
+    document.getElementById('otpEmail').value = '';
+    document.getElementById('otpCode').value = '';
+    document.getElementById('emailErr').textContent = 'Your session expired. Please sign in again.';
     showStep('stepEmail');
-    checkIdentity();
   }
 
   // Reset timer on any user interaction
@@ -221,7 +240,7 @@
   // ── Navigation ──────────────────────────────────────────────
 
   function showStep(id) {
-    ['stepEmail','stepRegister','stepJoin','stepApp'].forEach(function(s) {
+    ['stepEmail','stepOtp','stepRegister','stepJoin','stepApp'].forEach(function(s) {
       document.getElementById(s).classList.add('hidden');
     });
     document.getElementById(id).classList.remove('hidden');
@@ -245,19 +264,55 @@
 
   // ── Auth ────────────────────────────────────────────────────
 
-  function checkIdentity() {
-    document.getElementById('emailLoading').textContent = 'Signing you in…';
+  function sendOtp() {
+    var email = document.getElementById('otpEmail').value.trim();
+    if (!email) { document.getElementById('emailErr').textContent = 'Enter your email.'; return; }
+    document.getElementById('emailErr').textContent = 'Sending code…';
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r.error) { document.getElementById('emailErr').textContent = r.error; return; }
+        document.getElementById('emailErr').textContent = '';
+        document.getElementById('otpHint').textContent = 'Code sent to ' + email + '. Check your inbox.';
+        document.getElementById('otpCode').value = '';
+        document.getElementById('otpErr').textContent = '';
+        showStep('stepOtp');
+        document.getElementById('otpCode').focus();
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('emailErr').textContent = e.message;
+      })
+      .sendOtp(email);
+  }
+
+  function verifyOtp() {
+    var email = document.getElementById('otpEmail').value.trim();
+    var code  = document.getElementById('otpCode').value.trim();
+    if (!code) { document.getElementById('otpErr').textContent = 'Enter the 6-digit code.'; return; }
+    document.getElementById('otpErr').textContent = 'Verifying…';
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r.error) { document.getElementById('otpErr').textContent = r.error; return; }
+        sessionToken = r.token;
+        sessionStorage.setItem('fifa_token', sessionToken);
+        document.getElementById('otpErr').textContent = '';
+        _afterSignIn();
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('otpErr').textContent = e.message;
+      })
+      .verifyOtp(email, code);
+  }
+
+  function _afterSignIn() {
     google.script.run
       .withSuccessHandler(function(p) {
-        document.getElementById('emailErr').textContent = '';
         if (p) { participant = p; showApp(); loadMatches(); }
         else   { showStep('stepRegister'); }
       })
       .withFailureHandler(function(e) {
-        document.getElementById('emailLoading').style.display = 'none';
-        document.getElementById('emailErr').textContent = e.message;
+        document.getElementById('otpErr').textContent = e.message;
       })
-      .lookupParticipant();
+      .lookupParticipant(sessionToken);
   }
 
   function register() {
@@ -271,12 +326,12 @@
         google.script.run
           .withSuccessHandler(function(p) { participant = p; showApp(); loadMatches(); })
           .withFailureHandler(function(e) { document.getElementById('regErr').textContent = e.message; })
-          .lookupParticipant();
+          .lookupParticipant(sessionToken);
       })
       .withFailureHandler(function(e) {
         document.getElementById('regErr').textContent = e.message;
       })
-      .registerParticipant(name, code);
+      .registerParticipant(name, code, sessionToken);
   }
 
   function joinGroup() {
@@ -294,7 +349,7 @@
       .withFailureHandler(function(e) {
         document.getElementById('joinErr').textContent = e.message;
       })
-      .joinGroup(code);
+      .joinGroup(code, sessionToken);
   }
 
   function refreshGroupBadges() {
@@ -314,7 +369,7 @@
         google.script.run
           .withSuccessHandler(function(preds) { renderMatches(matches, preds); matchesLoaded = true; })
           .withFailureHandler(function(e) { document.getElementById('loading').textContent = 'Error: ' + e.message; })
-          .getMyPredictions();
+          .getMyPredictions(sessionToken);
       })
       .withFailureHandler(function(e) { document.getElementById('loading').textContent = 'Error: ' + e.message; })
       .getUpcomingMatches();
@@ -432,7 +487,7 @@
         statusEl.className = 'status-line err';
         statusEl.textContent = e.message;
       })
-      .submitPrediction(matchId, h, a);
+      .submitPrediction(matchId, h, a, sessionToken);
   }
 
   function toggleBreakdown(id) {
@@ -478,7 +533,7 @@
       .withFailureHandler(function(e) {
         document.getElementById('lbLoading').textContent = 'Error: ' + e.message;
       })
-      .getLeaderboard(groupName, null);
+      .getLeaderboard(groupName, sessionToken);
   }
 
   // Knockout stages — K/O column is meaningful for these
@@ -567,8 +622,27 @@
     document.getElementById('lbTable').classList.remove('hidden');
   }
 
-  // Auto-resolve identity on page load
-  checkIdentity();
+  // On page load: resume session token if one exists, else show email step
+  if (sessionToken) {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r && r.expired) {
+          sessionToken = null;
+          sessionStorage.removeItem('fifa_token');
+          showStep('stepEmail');
+        } else {
+          _afterSignIn();
+        }
+      })
+      .withFailureHandler(function() {
+        sessionToken = null;
+        sessionStorage.removeItem('fifa_token');
+        showStep('stepEmail');
+      })
+      .refreshSession(sessionToken);
+  } else {
+    showStep('stepEmail');
+  }
 </script>
 </body>
 </html>
