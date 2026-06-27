@@ -35,17 +35,19 @@ function fetchMatches() {
     var home = m.Home || m.HomeTeam || {};
     var away = m.Away || m.AwayTeam || {};
     return [
-      m.IdMatch  || '',
-      _desc(m.StageName),
-      m.MatchDay || '',
-      _desc(m.GroupName),
-      m.Date     || m.LocalDate || '',
-      _teamName(home),
-      _teamName(away),
-      home.Score !== undefined ? home.Score : '',
-      away.Score !== undefined ? away.Score : '',
-      _status(m.MatchStatus),
-      nowTs,
+      m.IdMatch  || '',                                      // A: MatchId
+      _desc(m.StageName),                                    // B: Stage
+      m.MatchDay || '',                                      // C: MatchDay
+      _desc(m.GroupName),                                    // D: GroupName
+      m.Date     || m.LocalDate || '',                       // E: Date
+      _teamName(home),                                       // F: Home
+      _teamName(away),                                       // G: Away
+      home.Score !== undefined ? home.Score : '',            // H: HomeScore
+      away.Score !== undefined ? away.Score : '',            // I: AwayScore
+      _status(m.MatchStatus),                                // J: Status
+      nowTs,                                                 // K: FetchedAt
+      m.HomeTeamPenaltyScore !== undefined && m.HomeTeamPenaltyScore !== null ? m.HomeTeamPenaltyScore : '',  // L: HomePenaltyScore
+      m.AwayTeamPenaltyScore !== undefined && m.AwayTeamPenaltyScore !== null ? m.AwayTeamPenaltyScore : '',  // M: AwayPenaltyScore
     ];
   });
 

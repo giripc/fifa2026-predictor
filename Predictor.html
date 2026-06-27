@@ -96,6 +96,13 @@
     .lb-name-btn:hover{text-decoration:underline}
 
     #loading{text-align:center;padding:40px;color:#aaa;font-size:1rem}
+
+    /* Penalty winner toggle */
+    .pen-toggle{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+    .pen-btn{padding:5px 12px;border:1px solid #2a4070;border-radius:6px;background:#0d1f3c;
+      color:#aaa;font-size:.8rem;cursor:pointer}
+    .pen-btn:hover{border-color:#f0c030;color:#f0c030}
+    .pen-btn.pen-selected{background:#f0a030;color:#0a1628;border-color:#f0a030;font-weight:bold}
   </style>
 </head>
 <body>
@@ -433,13 +440,25 @@
           statusLine = '<div class="status-line" style="color:#f0c030">⏳ In progress &nbsp; ' + predTxt + '</div>';
         } else {
           // Upcoming — editable
-          var savedTxt = preds[m.id] ? '✓ ' + pred.home + ' – ' + pred.away : '';
+          var isKo = !m.group;
+          var savedPen = pred.penaltyWinner || '';
+          var savedTxt = preds[m.id] ? '✓ ' + pred.home + ' – ' + pred.away + (savedPen ? ' (pen: ' + savedPen + ')' : '') : '';
+          var penToggle = '';
+          if (isKo) {
+            var showPen = (pred.home !== undefined && pred.away !== undefined && pred.home === pred.away) ? '' : 'display:none';
+            penToggle = '<div id="pen_' + m.id + '" class="pen-toggle" style="' + showPen + '">'
+              + '<span style="color:#aaa;font-size:.8rem">Penalties:</span>'
+              + '<button id="penH_' + m.id + '" class="pen-btn' + (savedPen === 'Home' ? ' pen-selected' : '') + '" onclick="setPen(\'' + m.id + '\',\'Home\')">' + m.home + '</button>'
+              + '<button id="penA_' + m.id + '" class="pen-btn' + (savedPen === 'Away' ? ' pen-selected' : '') + '" onclick="setPen(\'' + m.id + '\',\'Away\')">' + m.away + '</button>'
+              + '</div>';
+          }
           scoreRow = '<div class="score-row">'
-            + '<input id="h_' + m.id + '" type="number" min="0" max="20" value="' + (pred.home !== undefined ? pred.home : '') + '" placeholder="0"/>'
+            + '<input id="h_' + m.id + '" type="number" min="0" max="20" value="' + (pred.home !== undefined ? pred.home : '') + '" placeholder="0" oninput="onScoreInput(\'' + m.id + '\')" />'
             + '<span class="dash">–</span>'
-            + '<input id="a_' + m.id + '" type="number" min="0" max="20" value="' + (pred.away !== undefined ? pred.away : '') + '" placeholder="0"/>'
+            + '<input id="a_' + m.id + '" type="number" min="0" max="20" value="' + (pred.away !== undefined ? pred.away : '') + '" placeholder="0" oninput="onScoreInput(\'' + m.id + '\')" />'
             + '<button class="save-btn" onclick="savePred(\'' + m.id + '\',this)">Save</button>'
-            + '</div>';
+            + '</div>'
+            + penToggle;
           statusLine = '<div id="status_' + m.id + '" class="status-line">' + savedTxt + '</div>';
         }
 
@@ -460,6 +479,29 @@
     container.innerHTML = html;
   }
 
+  function onScoreInput(matchId) {
+    var h = document.getElementById('h_' + matchId);
+    var a = document.getElementById('a_' + matchId);
+    var penDiv = document.getElementById('pen_' + matchId);
+    if (!penDiv) return;
+    var hv = parseInt(h.value), av = parseInt(a.value);
+    if (!isNaN(hv) && !isNaN(av) && hv === av) {
+      penDiv.style.display = '';
+    } else {
+      penDiv.style.display = 'none';
+      // Clear selection if score no longer a draw
+      var penH = document.getElementById('penH_' + matchId);
+      var penA = document.getElementById('penA_' + matchId);
+      if (penH) penH.classList.remove('pen-selected');
+      if (penA) penA.classList.remove('pen-selected');
+    }
+  }
+
+  function setPen(matchId, winner) {
+    document.getElementById('penH_' + matchId).classList.toggle('pen-selected', winner === 'Home');
+    document.getElementById('penA_' + matchId).classList.toggle('pen-selected', winner === 'Away');
+  }
+
   function savePred(matchId, btn) {
     var h = parseInt(document.getElementById('h_' + matchId).value);
     var a = parseInt(document.getElementById('a_' + matchId).value);
@@ -469,6 +511,22 @@
       statusEl.textContent = 'Enter both scores.';
       return;
     }
+
+    // Collect penalty winner if draw predicted on knockout match
+    var penWinner = null;
+    var penDiv = document.getElementById('pen_' + matchId);
+    if (penDiv && h === a) {
+      var penH = document.getElementById('penH_' + matchId);
+      var penA = document.getElementById('penA_' + matchId);
+      if (penH && penH.classList.contains('pen-selected')) penWinner = 'Home';
+      else if (penA && penA.classList.contains('pen-selected')) penWinner = 'Away';
+      if (!penWinner) {
+        statusEl.className = 'status-line err';
+        statusEl.textContent = 'Select a penalty winner for drawn score.';
+        return;
+      }
+    }
+
     btn.disabled = true; btn.textContent = '…';
     google.script.run
       .withSuccessHandler(function(r) {
@@ -479,7 +537,7 @@
           btn.disabled = true; btn.textContent = 'Locked';
         } else {
           statusEl.className = 'status-line';
-          statusEl.textContent = '✓ Saved: ' + h + ' – ' + a;
+          statusEl.textContent = '✓ Saved: ' + h + ' – ' + a + (penWinner ? ' (pen: ' + penWinner + ')' : '');
         }
       })
       .withFailureHandler(function(e) {
@@ -487,7 +545,7 @@
         statusEl.className = 'status-line err';
         statusEl.textContent = e.message;
       })
-      .submitPrediction(matchId, h, a, sessionToken);
+      .submitPrediction(matchId, h, a, penWinner, sessionToken);
   }
 
   function toggleBreakdown(id) {

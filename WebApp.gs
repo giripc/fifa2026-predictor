@@ -18,12 +18,10 @@ function sendOtp(email) {
   const cache = CacheService.getScriptCache();
 
   // Rate-limit: block re-requests within OTP_RATE seconds
-  if (cache.get('otp_rate_' + key))
+  if (cache.get('otp_rl_' + key))
     return { error: 'OTP already sent. Please wait a few minutes before requesting again.' };
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
-  cache.put('otp_' + key, code, OTP_TTL);
-  cache.put('otp_rate_' + key, '1', OTP_RATE);
 
   try {
     MailApp.sendEmail({
@@ -32,8 +30,12 @@ function sendOtp(email) {
       body: 'Your one-time sign-in code is: ' + code + '\n\nThis code expires in 10 minutes.'
     });
   } catch (e) {
-    return { error: 'Could not send email. Please try again later.' };
+    return { error: 'Mail error: ' + e.message };
   }
+
+  // Only set rate-limit and store code after successful send
+  cache.put('otp_' + key, code, OTP_TTL);
+  cache.put('otp_rl_' + key, '1', OTP_RATE);
   return { success: true };
 }
 
@@ -137,10 +139,14 @@ function getUpcomingMatches() {
       var isCompleted = status === 'Completed';
       var isLive = status === 'Live';
       var isUpcoming = (kickoff - now) > cutoffMs;
+      const homePen = r[11] !== '' && r[11] !== undefined ? Number(r[11]) : null;
+      const awayPen = r[12] !== '' && r[12] !== undefined ? Number(r[12]) : null;
       return {
         id: r[0], stage: r[1], date: r[4], group: r[3], home: r[5], away: r[6],
         homeScore: isCompleted || isLive ? r[7] : null,
         awayScore: isCompleted || isLive ? r[8] : null,
+        homePenScore: isCompleted && homePen !== null && homePen > 0 ? homePen : null,
+        awayPenScore: isCompleted && awayPen !== null && awayPen > 0 ? awayPen : null,
         status: isCompleted ? 'completed' : isLive ? 'live' : isUpcoming ? 'upcoming' : 'started'
       };
     });
@@ -154,12 +160,12 @@ function getMyPredictions(token) {
     .getSheetByName(SHEETS.PREDICTIONS).getDataRange().getValues();
   const preds = {};
   data.slice(1).forEach(r => {
-    if (r[1] === participant.id) preds[String(r[2])] = { home: r[3], away: r[4] };
+    if (r[1] === participant.id) preds[String(r[2])] = { home: r[3], away: r[4], penaltyWinner: r[6] || null };
   });
   return preds;
 }
 
-function submitPrediction(matchId, predHome, predAway, token) {
+function submitPrediction(matchId, predHome, predAway, penaltyWinner, token) {
   const participant = lookupParticipant(token);
   if (!participant) return { error: 'Unauthorized. Please sign in.' };
   const participantId = participant.id;
@@ -168,6 +174,9 @@ function submitPrediction(matchId, predHome, predAway, token) {
   const h = parseInt(predHome), a = parseInt(predAway);
   if (isNaN(h) || isNaN(a) || h < 0 || h > 20 || a < 0 || a > 20)
     return { error: 'Invalid score values.' };
+
+  // Validate penalty winner — only allowed if draw predicted on a knockout match
+  const pen = (penaltyWinner === 'Home' || penaltyWinner === 'Away') ? penaltyWinner : null;
 
   // Server-side cutoff check — reject if match is within 1 hour of kickoff or already started
   const matchData = SpreadsheetApp.getActiveSpreadsheet()
@@ -193,13 +202,13 @@ function submitPrediction(matchId, predHome, predAway, token) {
 
   for (let i = 1; i < data.length; i++) {
     if (data[i][1] === participantId && String(data[i][2]) === String(matchId)) {
-      sheet.getRange(i + 1, 4, 1, 3)
-        .setValues([[h, a, new Date().toISOString()]]);
+      sheet.getRange(i + 1, 4, 1, 4)
+        .setValues([[h, a, new Date().toISOString(), pen || '']]);
       return { success: true };
     }
   }
   sheet.appendRow([Utilities.getUuid(), participantId, matchId,
-    h, a, new Date().toISOString()]);
+    h, a, new Date().toISOString(), pen || '']);
   return { success: true };
 }
 
@@ -254,11 +263,15 @@ function getLeaderboard(groupName, token) {
   const matchMap = {};
   matchData.forEach(r => {
     if (r[9] === 'Completed' && r[7] !== '' && r[8] !== '') {
+      const homePen = r[11] !== '' && r[11] !== undefined ? Number(r[11]) : null;
+      const awayPen = r[12] !== '' && r[12] !== undefined ? Number(r[12]) : null;
+      const wentToPenalties = homePen !== null && awayPen !== null && (homePen > 0 || awayPen > 0);
       matchMap[r[0]] = {
-        homeScore: Number(r[7]),
-        awayScore: Number(r[8]),
-        stage:     r[1] || 'Other',
-        group:     r[3],
+        homeScore:      Number(r[7]),
+        awayScore:      Number(r[8]),
+        stage:          r[1] || 'Other',
+        group:          r[3],
+        penaltyWinner:  wentToPenalties ? (homePen > awayPen ? 'Home' : 'Away') : null,
       };
     }
   });
@@ -304,7 +317,9 @@ function getLeaderboard(groupName, token) {
     if (predResult !== realResult) return SCORING.KO_WRONG;
     if (predHome === actualHome && predAway === actualAway) return SCORING.KO_EXACT;
     const diff = Math.abs(predHome - actualHome) + Math.abs(predAway - actualAway);
-    return Math.max(SCORING.KO_FLOOR, SCORING.KO_EXACT - diff);
+    if (diff === 1) return SCORING.KO_1GOAL;
+    if (diff === 2) return SCORING.KO_2GOAL;
+    return SCORING.KO_FLOOR;
   }
 
   // Track which matches each participant predicted
@@ -318,6 +333,7 @@ function getLeaderboard(groupName, token) {
     predictedMatches[pid].add(mid);
 
     const predHome = Number(r[3]), predAway = Number(r[4]);
+    const predPenWinner = r[6] || null;
     // Group-stage matches have a non-empty GroupName (e.g. "Group A"); knockout matches don't
     const isKnockout = !match.group;
     const mult = isKnockout ? SCORING.KNOCKOUT_MULT : 1;
@@ -327,10 +343,17 @@ function getLeaderboard(groupName, token) {
     if (isKnockout) {
       // Proximity scoring for knockout rounds
       const pts = _koScore(predHome, predAway, match.homeScore, match.awayScore);
-      knockoutScores[pid] += pts;
-      stageScores[pid][stage].koScore += pts;
 
-      // Also track exact/correct/incorrect for breakdown chips
+      // Penalty bonus — only if match went to penalties and user predicted a draw
+      let penBonus = 0;
+      if (match.penaltyWinner && predHome === predAway && predPenWinner === match.penaltyWinner) {
+        penBonus = SCORING.KO_PENALTY_BONUS;
+      }
+
+      knockoutScores[pid] += pts + penBonus;
+      stageScores[pid][stage].koScore += pts + penBonus;
+
+      // Track exact/correct/incorrect for breakdown chips
       if (predHome === match.homeScore && predAway === match.awayScore) {
         breakdown[pid].exactScore++;
         stageScores[pid][stage].exactScore++;
