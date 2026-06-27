@@ -46,8 +46,8 @@ function fetchMatches() {
       away.Score !== undefined ? away.Score : '',            // I: AwayScore
       _status(m.MatchStatus),                                // J: Status
       nowTs,                                                 // K: FetchedAt
-      m.HomeTeamPenaltyScore !== undefined && m.HomeTeamPenaltyScore !== null ? m.HomeTeamPenaltyScore : '',  // L: HomePenaltyScore
-      m.AwayTeamPenaltyScore !== undefined && m.AwayTeamPenaltyScore !== null ? m.AwayTeamPenaltyScore : '',  // M: AwayPenaltyScore
+      m.HomeTeamPenaltyScore != null ? m.HomeTeamPenaltyScore : 0,  // L: HomePenaltyScore (0 = no penalties)
+      m.AwayTeamPenaltyScore != null ? m.AwayTeamPenaltyScore : 0,  // M: AwayPenaltyScore (0 = no penalties)
     ];
   });
 
