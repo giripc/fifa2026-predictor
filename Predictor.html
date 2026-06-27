@@ -177,7 +177,7 @@
     <table class="lb-table hidden" id="lbTable">
       <thead>
         <tr>
-          <th>#</th><th>Name</th><th>Points</th>
+          <th>#</th><th>Name</th><th>Points</th><th id="lbKoHeader" title="Proximity score: Round of 32 onwards (exact=6, wrong=-1)">K/O Pts</th>
         </tr>
       </thead>
       <tbody id="lbBody"></tbody>
@@ -481,6 +481,9 @@
       .getLeaderboard(groupName, null);
   }
 
+  // Knockout stages — K/O column is meaningful for these
+  var KO_STAGES = ['Round of 32', 'Round of 16', 'Quarter-final', 'Semi-final', 'Play-off for third place', 'Final'];
+
   function renderLeaderboard() {
     if (!lbCache) return;
     var stage = document.getElementById('lbStageSelect').value || null;
@@ -493,17 +496,27 @@
       return;
     }
 
+    // Show K/O column in cumulative view, or when viewing a knockout stage
+    var isKoStage = stage ? KO_STAGES.indexOf(stage) !== -1 : false;
+    var showKoCol = !stage || isKoStage;
+    document.getElementById('lbKoHeader').style.display = showKoCol ? '' : 'none';
+
     // Derive display rows — for stage view re-rank by that stage's score
     var displayRows;
     if (stage) {
       displayRows = allRows.map(function(r) {
-        var ss = (r.stageScores && r.stageScores[stage]) || { score: 0, exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
-        return { id: r.id, name: r.name, score: ss.score, breakdown: ss };
-      }).sort(function(a, b) { return b.score - a.score; });
+        var ss = (r.stageScores && r.stageScores[stage]) || { score: 0, koScore: 0, exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
+        return { id: r.id, name: r.name, score: ss.score, koScore: ss.koScore || 0, breakdown: ss };
+      }).sort(function(a, b) {
+        // For KO stages, rank by koScore; for group stage, rank by score
+        return isKoStage ? b.koScore - a.koScore : b.score - a.score;
+      });
       // Re-rank
       var rank = 1;
       displayRows.forEach(function(row, i) {
-        if (i > 0 && displayRows[i - 1].score > row.score) rank = i + 1;
+        var prevScore = isKoStage ? displayRows[i - 1] && displayRows[i - 1].koScore : displayRows[i - 1] && displayRows[i - 1].score;
+        var curScore  = isKoStage ? row.koScore : row.score;
+        if (i > 0 && prevScore > curScore) rank = i + 1;
         row.rank = rank;
       });
     } else {
@@ -518,6 +531,10 @@
       var bdId = 'bd_' + idx;
 
       var stageBadge = stage ? '<span class="lb-stage-badge">' + stage + '</span>' : '';
+      var koScore = (r.knockoutScore !== undefined) ? r.knockoutScore : (r.koScore || 0);
+      var koCell = showKoCol
+        ? '<td class="score-pts" style="color:#f0a030;" title="Proximity score (R32+)">' + koScore + '</td>'
+        : '';
 
       // Main row
       var tr = document.createElement('tr');
@@ -526,7 +543,8 @@
         + '<td><button class="lb-name-btn" onclick="toggleBreakdown(\'' + bdId + '\')">'
         + r.name + (isMe ? ' <span style="color:#f0c030;font-size:.75rem">(you)</span>' : '')
         + ' <span style="color:#555;font-size:.7rem">▾</span></button></td>'
-        + '<td class="score-pts">' + r.score + stageBadge + '</td>';
+        + '<td class="score-pts">' + r.score + stageBadge + '</td>'
+        + koCell;
       tbody.appendChild(tr);
 
       // Breakdown row (hidden by default)
@@ -538,11 +556,12 @@
       if (bd.noPrediction)   chips += '<span class="chip chip-miss">— No prediction ×' + bd.noPrediction + '</span>';
       if (!chips)            chips  = '<span class="chip chip-miss">No completed matches yet</span>';
 
+      var colspan = showKoCol ? '4' : '3';
       var trBd = document.createElement('tr');
       trBd.className = 'breakdown-row';
       trBd.id = bdId;
       trBd.style.display = 'none';
-      trBd.innerHTML = '<td colspan="3"><div class="breakdown-chips">' + chips + '</div></td>';
+      trBd.innerHTML = '<td colspan="' + colspan + '"><div class="breakdown-chips">' + chips + '</div></td>';
       tbody.appendChild(trBd);
     });
     document.getElementById('lbTable').classList.remove('hidden');

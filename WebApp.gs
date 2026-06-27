@@ -224,10 +224,12 @@ function getLeaderboard(groupName) {
 
   // Tally scores per participant with overall and per-stage breakdown
   const scores = {};
+  const knockoutScores = {};  // proximity scoring, Round of 32+ only
   const breakdown = {};
   const stageScores = {};
   Object.keys(nameMap).forEach(id => {
     scores[id] = 0;
+    knockoutScores[id] = 0;
     breakdown[id] = { exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
     stageScores[id] = {};
   });
@@ -237,8 +239,18 @@ function getLeaderboard(groupName) {
 
   function _ensureStage(pid, stage) {
     if (!stageScores[pid][stage]) {
-      stageScores[pid][stage] = { score: 0, exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
+      stageScores[pid][stage] = { score: 0, koScore: 0, exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
     }
+  }
+
+  // Returns proximity score for a knockout match prediction
+  function _koScore(predHome, predAway, actualHome, actualAway) {
+    const predResult = Math.sign(predHome - predAway);
+    const realResult = Math.sign(actualHome - actualAway);
+    if (predResult !== realResult) return SCORING.KO_WRONG;
+    if (predHome === actualHome && predAway === actualAway) return SCORING.KO_EXACT;
+    const diff = Math.abs(predHome - actualHome) + Math.abs(predAway - actualAway);
+    return Math.max(SCORING.KO_FLOOR, SCORING.KO_EXACT - diff);
   }
 
   // Track which matches each participant predicted
@@ -258,22 +270,42 @@ function getLeaderboard(groupName) {
     const stage = match.stage;
     _ensureStage(pid, stage);
 
+    if (isKnockout) {
+      // Proximity scoring for knockout rounds
+      const pts = _koScore(predHome, predAway, match.homeScore, match.awayScore);
+      knockoutScores[pid] += pts;
+      stageScores[pid][stage].koScore += pts;
+
+      // Also track exact/correct/incorrect for breakdown chips
+      if (predHome === match.homeScore && predAway === match.awayScore) {
+        breakdown[pid].exactScore++;
+        stageScores[pid][stage].exactScore++;
+      } else if (Math.sign(predHome - predAway) === Math.sign(match.homeScore - match.awayScore)) {
+        breakdown[pid].correctResult++;
+        stageScores[pid][stage].correctResult++;
+      } else {
+        breakdown[pid].incorrect++;
+        stageScores[pid][stage].incorrect++;
+      }
+    }
+
+    // Cumulative score (original logic, unchanged — covers all stages)
     if (predHome === match.homeScore && predAway === match.awayScore) {
       scores[pid] += SCORING.CORRECT_SCORE * mult;
-      breakdown[pid].exactScore++;
       stageScores[pid][stage].score += SCORING.CORRECT_SCORE * mult;
-      stageScores[pid][stage].exactScore++;
+      if (!isKnockout) breakdown[pid].exactScore++;
+      if (!isKnockout) stageScores[pid][stage].exactScore++;
     } else {
       const predResult = Math.sign(predHome - predAway);
       const realResult = Math.sign(match.homeScore - match.awayScore);
       if (predResult === realResult) {
         scores[pid] += SCORING.CORRECT_RESULT * mult;
-        breakdown[pid].correctResult++;
         stageScores[pid][stage].score += SCORING.CORRECT_RESULT * mult;
-        stageScores[pid][stage].correctResult++;
+        if (!isKnockout) breakdown[pid].correctResult++;
+        if (!isKnockout) stageScores[pid][stage].correctResult++;
       } else {
-        breakdown[pid].incorrect++;
-        stageScores[pid][stage].incorrect++;
+        if (!isKnockout) breakdown[pid].incorrect++;
+        if (!isKnockout) stageScores[pid][stage].incorrect++;
       }
     }
   });
@@ -302,6 +334,7 @@ function getLeaderboard(groupName) {
   const ranked = Object.keys(scores)
     .map(id => ({
       id, name: nameMap[id], score: scores[id],
+      knockoutScore: knockoutScores[id],
       groups: groupsMap[id] || [],
       breakdown: breakdown[id],
       stageScores: stageScores[id],
