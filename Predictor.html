@@ -105,25 +105,21 @@
   <p class="sub">Predict scores before each match kicks off</p>
 </div>
 
-<!-- Step 1: Email -->
+<!-- Step 1: Loading (Google identity resolved server-side) -->
 <div class="auth-wrap">
 <div id="stepEmail" class="card">
-  <label>Your Email
-    <input id="email" type="email" placeholder="you@example.com"/>
-  </label>
-  <button class="btn" onclick="checkEmail()">Continue →</button>
   <div id="emailErr" class="error"></div>
+  <div id="emailLoading" style="text-align:center;color:#aaa;padding:20px">Signing you in…</div>
 </div>
 </div>
 
 <!-- Step 2: Register -->
 <div class="auth-wrap">
 <div id="stepRegister" class="card hidden">
-  <div class="success">New here! Fill in your details to join.</div>
+  <div class="success">Welcome! Fill in your details to join.</div>
   <label>Full Name   <input id="regName" placeholder="Your name"/></label>
   <label>Invite Code <input id="regCode" placeholder="Ask your group admin"/></label>
   <button class="btn" onclick="register()">Join & Start Predicting →</button>
-  <button class="btn btn-sec" onclick="showStep('stepEmail')">← Back</button>
   <div id="regErr" class="error"></div>
 </div>
 </div>
@@ -212,9 +208,9 @@
     matchesLoaded = false;
     lbLoaded = false;
     lbCache = null;
-    document.getElementById('email').value = '';
-    document.getElementById('emailErr').textContent = 'Your session expired. Please re-enter your email.';
+    document.getElementById('emailErr').textContent = 'Your session expired. Verifying identity…';
     showStep('stepEmail');
+    checkIdentity();
   }
 
   // Reset timer on any user interaction
@@ -249,10 +245,8 @@
 
   // ── Auth ────────────────────────────────────────────────────
 
-  function checkEmail() {
-    var email = document.getElementById('email').value.trim();
-    if (!email) { document.getElementById('emailErr').textContent = 'Please enter your email.'; return; }
-    document.getElementById('emailErr').textContent = 'Checking…';
+  function checkIdentity() {
+    document.getElementById('emailLoading').textContent = 'Signing you in…';
     google.script.run
       .withSuccessHandler(function(p) {
         document.getElementById('emailErr').textContent = '';
@@ -260,15 +254,15 @@
         else   { showStep('stepRegister'); }
       })
       .withFailureHandler(function(e) {
+        document.getElementById('emailLoading').style.display = 'none';
         document.getElementById('emailErr').textContent = e.message;
       })
-      .lookupParticipant(email);
+      .lookupParticipant();
   }
 
   function register() {
-    var name  = document.getElementById('regName').value.trim();
-    var code  = document.getElementById('regCode').value.trim();
-    var email = document.getElementById('email').value.trim();
+    var name = document.getElementById('regName').value.trim();
+    var code = document.getElementById('regCode').value.trim();
     if (!name || !code) { document.getElementById('regErr').textContent = 'All fields required.'; return; }
     document.getElementById('regErr').textContent = 'Registering…';
     google.script.run
@@ -276,12 +270,13 @@
         if (r.error) { document.getElementById('regErr').textContent = r.error; return; }
         google.script.run
           .withSuccessHandler(function(p) { participant = p; showApp(); loadMatches(); })
-          .lookupParticipant(email);
+          .withFailureHandler(function(e) { document.getElementById('regErr').textContent = e.message; })
+          .lookupParticipant();
       })
       .withFailureHandler(function(e) {
         document.getElementById('regErr').textContent = e.message;
       })
-      .registerParticipant(name, email, code);
+      .registerParticipant(name, code);
   }
 
   function joinGroup() {
@@ -299,7 +294,7 @@
       .withFailureHandler(function(e) {
         document.getElementById('joinErr').textContent = e.message;
       })
-      .joinGroup(participant.id, code);
+      .joinGroup(code);
   }
 
   function refreshGroupBadges() {
@@ -318,8 +313,10 @@
       .withSuccessHandler(function(matches) {
         google.script.run
           .withSuccessHandler(function(preds) { renderMatches(matches, preds); matchesLoaded = true; })
-          .getMyPredictions(participant.id);
+          .withFailureHandler(function(e) { document.getElementById('loading').textContent = 'Error: ' + e.message; })
+          .getMyPredictions();
       })
+      .withFailureHandler(function(e) { document.getElementById('loading').textContent = 'Error: ' + e.message; })
       .getUpcomingMatches();
   }
 
@@ -435,7 +432,7 @@
         statusEl.className = 'status-line err';
         statusEl.textContent = e.message;
       })
-      .submitPrediction(participant.id, matchId, h, a);
+      .submitPrediction(matchId, h, a);
   }
 
   function toggleBreakdown(id) {
@@ -481,7 +478,7 @@
       .withFailureHandler(function(e) {
         document.getElementById('lbLoading').textContent = 'Error: ' + e.message;
       })
-      .getLeaderboard(groupName, participant.id);
+      .getLeaderboard(groupName, null);
   }
 
   function renderLeaderboard() {
@@ -550,6 +547,9 @@
     });
     document.getElementById('lbTable').classList.remove('hidden');
   }
+
+  // Auto-resolve identity on page load
+  checkIdentity();
 </script>
 </body>
 </html>

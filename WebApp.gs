@@ -6,46 +6,63 @@ function doGet() {
 
 // ── Auth ─────────────────────────────────────────────────────
 
-function lookupParticipant(email) {
+function _getVerifiedEmail() {
+  const email = Session.getActiveUser().getEmail();
+  if (!email) throw new Error('Could not verify your identity. Please ensure you are signed in with your Google account.');
+  return email.toLowerCase();
+}
+
+function lookupParticipant() {
+  const email = _getVerifiedEmail();
   const data = SpreadsheetApp.getActiveSpreadsheet()
     .getSheetByName(SHEETS.PARTICIPANTS).getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (data[i][2].toString().toLowerCase() === email.toLowerCase()) {
+    if (data[i][2].toString().toLowerCase() === email) {
       const groups = _getGroupsForParticipant(data[i][0]);
-      return { id: data[i][0], name: data[i][1], groups: groups };
+      return { id: data[i][0], name: data[i][1], email: email, groups: groups };
     }
   }
   return null;
 }
 
-function registerParticipant(name, email, inviteCode) {
+function registerParticipant(name, inviteCode) {
+  const email = _getVerifiedEmail();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const groupName = _resolveInviteCode(inviteCode);
   if (!groupName) return { error: 'Invalid invite code. Please check with your group admin.' };
 
-  if (lookupParticipant(email)) return { error: 'Email already registered. Go back and enter your email to predict.' };
+  if (lookupParticipant()) return { error: 'Email already registered. Go back to sign in.' };
 
-  const participantId = Utilities.getUuid();
-  ss.getSheetByName(SHEETS.PARTICIPANTS)
-    .appendRow([participantId, name, email, new Date().toISOString()]);
-  ss.getSheetByName(SHEETS.MEMBERSHIPS)
-    .appendRow([Utilities.getUuid(), participantId, groupName, new Date().toISOString()]);
-
-  return { success: true, name, groups: [groupName] };
+  const lock = LockService.getScriptLock();
+  lock.tryLock(5000);
+  try {
+    if (lookupParticipant()) return { error: 'Email already registered. Go back to sign in.' };
+    const participantId = Utilities.getUuid();
+    ss.getSheetByName(SHEETS.PARTICIPANTS)
+      .appendRow([participantId, name, email, new Date().toISOString()]);
+    ss.getSheetByName(SHEETS.MEMBERSHIPS)
+      .appendRow([Utilities.getUuid(), participantId, groupName, new Date().toISOString()]);
+    return { success: true, name, groups: [groupName] };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
-function joinGroup(participantId, inviteCode) {
+function joinGroup(inviteCode) {
+  const email = _getVerifiedEmail();
+  const participant = lookupParticipant();
+  if (!participant) return { error: 'Participant not found. Please register first.' };
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const groupName = _resolveInviteCode(inviteCode);
   if (!groupName) return { error: 'Invalid invite code. Please check with your group admin.' };
 
-  // Prevent duplicate membership
-  const existing = _getGroupsForParticipant(participantId);
+  const existing = _getGroupsForParticipant(participant.id);
   if (existing.indexOf(groupName) !== -1)
     return { error: 'You are already in the group "' + groupName + '".' };
 
   ss.getSheetByName(SHEETS.MEMBERSHIPS)
-    .appendRow([Utilities.getUuid(), participantId, groupName, new Date().toISOString()]);
+    .appendRow([Utilities.getUuid(), participant.id, groupName, new Date().toISOString()]);
 
   return { success: true, groupName: groupName };
 }
@@ -76,17 +93,28 @@ function getUpcomingMatches() {
   // 'started' matches (past kickoff but not yet marked Live/Completed) are shown locked
 }
 
-function getMyPredictions(participantId) {
+function getMyPredictions() {
+  const participant = lookupParticipant();
+  if (!participant) return {};
   const data = SpreadsheetApp.getActiveSpreadsheet()
     .getSheetByName(SHEETS.PREDICTIONS).getDataRange().getValues();
   const preds = {};
   data.slice(1).forEach(r => {
-    if (r[1] == participantId) preds[r[2]] = { home: r[3], away: r[4] };
+    if (r[1] === participant.id) preds[String(r[2])] = { home: r[3], away: r[4] };
   });
   return preds;
 }
 
-function submitPrediction(participantId, matchId, predHome, predAway) {
+function submitPrediction(matchId, predHome, predAway) {
+  const participant = lookupParticipant();
+  if (!participant) return { error: 'Unauthorized. Please sign in.' };
+  const participantId = participant.id;
+
+  // Validate score values
+  const h = parseInt(predHome), a = parseInt(predAway);
+  if (isNaN(h) || isNaN(a) || h < 0 || h > 20 || a < 0 || a > 20)
+    return { error: 'Invalid score values.' };
+
   // Server-side cutoff check — reject if match is within 1 hour of kickoff or already started
   const matchData = SpreadsheetApp.getActiveSpreadsheet()
     .getSheetByName(SHEETS.MATCHES).getDataRange().getValues();
@@ -110,14 +138,14 @@ function submitPrediction(participantId, matchId, predHome, predAway) {
   const data  = sheet.getDataRange().getValues();
 
   for (let i = 1; i < data.length; i++) {
-    if (data[i][1] == participantId && data[i][2] == matchId) {
+    if (data[i][1] === participantId && String(data[i][2]) === String(matchId)) {
       sheet.getRange(i + 1, 4, 1, 3)
-        .setValues([[predHome, predAway, new Date().toISOString()]]);
+        .setValues([[h, a, new Date().toISOString()]]);
       return { success: true };
     }
   }
   sheet.appendRow([Utilities.getUuid(), participantId, matchId,
-    predHome, predAway, new Date().toISOString()]);
+    h, a, new Date().toISOString()]);
   return { success: true };
 }
 
@@ -139,7 +167,9 @@ function _stageIndex(s) {
  * of stages that have completed matches.
  * groupName: null → global (all groups), string → filter to that group.
  */
-function getLeaderboard(groupName, participantId) {
+function getLeaderboard(groupName) {
+  const participant = lookupParticipant();
+  const participantId = participant ? participant.id : null;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   // Build participantId → name map (and optional group filter)
