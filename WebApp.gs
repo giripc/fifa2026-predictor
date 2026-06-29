@@ -324,6 +324,11 @@ function getLeaderboard(groupName, token) {
 
     if (isExact) return SCORING.KO_EXACT;
 
+    // Non-exact draw predicted on a penalty match — wrong pen winner gets partial credit
+    if (predDraw && actualDraw && actualPenWinner && predPenWinner !== actualPenWinner) {
+      return SCORING.KO_DRAW_WRONG_PEN;
+    }
+
     const predWinner = predDraw
       ? (actualPenWinner ? predPenWinner : 'draw')
       : (predHome > predAway ? 'Home' : 'Away');

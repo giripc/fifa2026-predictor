@@ -18,7 +18,8 @@ const SCORING = {
   KO_1GOAL:          3,   // correct outcome, 1 goal off
   KO_2GOAL:          2,   // correct outcome, 2 goals off
   KO_FLOOR:          1,   // correct outcome, 3+ goals off
-  KO_WRONG_PEN:      1,   // exact draw score but wrong penalty winner
+  KO_WRONG_PEN:      3,   // exact draw score but wrong penalty winner
+  KO_DRAW_WRONG_PEN: 1,   // non-exact draw predicted, wrong penalty winner
   KO_WRONG:         -1,   // wrong result
 };
 
