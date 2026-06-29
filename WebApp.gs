@@ -324,20 +324,24 @@ function getLeaderboard(groupName, token) {
 
     if (isExact) return SCORING.KO_EXACT;
 
-    // Non-exact draw predicted on a penalty match — wrong pen winner gets partial credit
-    if (predDraw && actualDraw && actualPenWinner && predPenWinner !== actualPenWinner) {
-      return SCORING.KO_DRAW_WRONG_PEN;
-    }
-
-    const predWinner = predDraw
-      ? (actualPenWinner ? predPenWinner : 'draw')
-      : (predHome > predAway ? 'Home' : 'Away');
+    // Determine actual winner (outright or via penalties)
     const actualWinner = actualDraw
       ? actualPenWinner
       : (actualHome > actualAway ? 'Home' : 'Away');
 
-    if (predWinner !== actualWinner) return SCORING.KO_WRONG;
+    // Determine predicted winner
+    // For predicted draws: pen winner pick identifies the team they back
+    const predWinner = predDraw ? predPenWinner : (predHome > predAway ? 'Home' : 'Away');
 
+    if (predWinner !== actualWinner) {
+      // Predicted draw, wrong pen winner — partial credit based on exactness
+      if (predDraw && actualDraw && actualPenWinner) {
+        return SCORING.KO_DRAW_WRONG_PEN;
+      }
+      return SCORING.KO_WRONG;
+    }
+
+    // Correct winner — apply proximity scoring on goal difference
     const diff = Math.abs(predHome - actualHome) + Math.abs(predAway - actualAway);
     if (diff === 1) return SCORING.KO_1GOAL;
     if (diff === 2) return SCORING.KO_2GOAL;
