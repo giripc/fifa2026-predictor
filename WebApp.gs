@@ -291,12 +291,10 @@ function getLeaderboard(groupName, token) {
 
   // Tally scores per participant with overall and per-stage breakdown
   const scores = {};
-  const knockoutScores = {};  // proximity scoring, Round of 32+ only
   const breakdown = {};
   const stageScores = {};
   Object.keys(nameMap).forEach(id => {
     scores[id] = 0;
-    knockoutScores[id] = 0;
     breakdown[id] = { exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
     stageScores[id] = {};
   });
@@ -306,16 +304,35 @@ function getLeaderboard(groupName, token) {
 
   function _ensureStage(pid, stage) {
     if (!stageScores[pid][stage]) {
-      stageScores[pid][stage] = { score: 0, koScore: 0, exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
+      stageScores[pid][stage] = { score: 0, exactScore: 0, correctResult: 0, incorrect: 0, noPrediction: 0 };
     }
   }
 
-  // Returns proximity score for a knockout match prediction
-  function _koScore(predHome, predAway, actualHome, actualAway) {
-    const predResult = Math.sign(predHome - predAway);
-    const realResult = Math.sign(actualHome - actualAway);
-    if (predResult !== realResult) return SCORING.KO_WRONG;
-    if (predHome === actualHome && predAway === actualAway) return SCORING.KO_EXACT;
+  // Proximity scoring for knockout rounds.
+  // Penalty winner is part of outcome: predicted draw must have correct pen winner.
+  function _koScore(predHome, predAway, actualHome, actualAway, predPenWinner, actualPenWinner) {
+    const isExact = predHome === actualHome && predAway === actualAway;
+    const predDraw = predHome === predAway;
+    const actualDraw = actualHome === actualAway;
+
+    if (isExact && actualDraw) {
+      if (actualPenWinner) {
+        return predPenWinner === actualPenWinner ? SCORING.KO_EXACT_PEN : SCORING.KO_WRONG_PEN;
+      }
+      return SCORING.KO_EXACT;
+    }
+
+    if (isExact) return SCORING.KO_EXACT;
+
+    const predWinner = predDraw
+      ? (actualPenWinner ? predPenWinner : 'draw')
+      : (predHome > predAway ? 'Home' : 'Away');
+    const actualWinner = actualDraw
+      ? actualPenWinner
+      : (actualHome > actualAway ? 'Home' : 'Away');
+
+    if (predWinner !== actualWinner) return SCORING.KO_WRONG;
+
     const diff = Math.abs(predHome - actualHome) + Math.abs(predAway - actualAway);
     if (diff === 1) return SCORING.KO_1GOAL;
     if (diff === 2) return SCORING.KO_2GOAL;
@@ -334,56 +351,35 @@ function getLeaderboard(groupName, token) {
 
     const predHome = Number(r[3]), predAway = Number(r[4]);
     const predPenWinner = r[6] || null;
-    // Group-stage matches have a non-empty GroupName (e.g. "Group A"); knockout matches don't
     const isKnockout = !match.group;
-    const mult = isKnockout ? SCORING.KNOCKOUT_MULT : 1;
     const stage = match.stage;
     _ensureStage(pid, stage);
 
+    let pts;
     if (isKnockout) {
-      // Proximity scoring for knockout rounds
-      const pts = _koScore(predHome, predAway, match.homeScore, match.awayScore);
-
-      // Penalty bonus — only if match went to penalties and user predicted a draw
-      let penBonus = 0;
-      if (match.penaltyWinner && predHome === predAway && predPenWinner === match.penaltyWinner) {
-        penBonus = SCORING.KO_PENALTY_BONUS;
-      }
-
-      knockoutScores[pid] += pts + penBonus;
-      stageScores[pid][stage].koScore += pts + penBonus;
-
-      // Track exact/correct/incorrect for breakdown chips
+      pts = _koScore(predHome, predAway, match.homeScore, match.awayScore, predPenWinner, match.penaltyWinner);
+    } else {
       if (predHome === match.homeScore && predAway === match.awayScore) {
-        breakdown[pid].exactScore++;
-        stageScores[pid][stage].exactScore++;
-      } else if (Math.sign(predHome - predAway) === Math.sign(match.homeScore - match.awayScore)) {
-        breakdown[pid].correctResult++;
-        stageScores[pid][stage].correctResult++;
+        pts = SCORING.CORRECT_SCORE;
       } else {
-        breakdown[pid].incorrect++;
-        stageScores[pid][stage].incorrect++;
+        const predResult = Math.sign(predHome - predAway);
+        const realResult = Math.sign(match.homeScore - match.awayScore);
+        pts = predResult === realResult ? SCORING.CORRECT_RESULT : 0;
       }
     }
 
-    // Cumulative score (original logic, unchanged — covers all stages)
+    scores[pid] += pts;
+    stageScores[pid][stage].score += pts;
+
     if (predHome === match.homeScore && predAway === match.awayScore) {
-      scores[pid] += SCORING.CORRECT_SCORE * mult;
-      stageScores[pid][stage].score += SCORING.CORRECT_SCORE * mult;
-      if (!isKnockout) breakdown[pid].exactScore++;
-      if (!isKnockout) stageScores[pid][stage].exactScore++;
+      breakdown[pid].exactScore++;
+      stageScores[pid][stage].exactScore++;
+    } else if (pts > 0) {
+      breakdown[pid].correctResult++;
+      stageScores[pid][stage].correctResult++;
     } else {
-      const predResult = Math.sign(predHome - predAway);
-      const realResult = Math.sign(match.homeScore - match.awayScore);
-      if (predResult === realResult) {
-        scores[pid] += SCORING.CORRECT_RESULT * mult;
-        stageScores[pid][stage].score += SCORING.CORRECT_RESULT * mult;
-        if (!isKnockout) breakdown[pid].correctResult++;
-        if (!isKnockout) stageScores[pid][stage].correctResult++;
-      } else {
-        if (!isKnockout) breakdown[pid].incorrect++;
-        if (!isKnockout) stageScores[pid][stage].incorrect++;
-      }
+      breakdown[pid].incorrect++;
+      stageScores[pid][stage].incorrect++;
     }
   });
 
@@ -411,7 +407,6 @@ function getLeaderboard(groupName, token) {
   const ranked = Object.keys(scores)
     .map(id => ({
       id, name: nameMap[id], score: scores[id],
-      knockoutScore: knockoutScores[id],
       groups: groupsMap[id] || [],
       breakdown: breakdown[id],
       stageScores: stageScores[id],

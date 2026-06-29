@@ -12,8 +12,10 @@ function setupSheets() {
 
   _ensureSheet(ss, SHEETS.MATCHES, [[
     'MatchId','Stage','MatchDay','Group','Date',
-    'HomeTeam','AwayTeam','HomeScore','AwayScore','Status','FetchedAt'
+    'HomeTeam','AwayTeam','HomeScore','AwayScore','Status','FetchedAt',
+    'HomePenaltyScore','AwayPenaltyScore'
   ]]);
+  patchMatchesHeaders();
 
   _ensureSheet(ss, SHEETS.PARTICIPANTS, [[
     'ParticipantId','Name','Email','JoinDate'
@@ -25,7 +27,7 @@ function setupSheets() {
 
   _ensureSheet(ss, SHEETS.PREDICTIONS, [[
     'PredictionId','ParticipantId','MatchId',
-    'PredHome','PredAway','SubmittedAt'
+    'PredHome','PredAway','SubmittedAt','PenaltyWinner'
   ]]);
 
   _ensureSheet(ss, SHEETS.GROUPS, [[
@@ -88,6 +90,23 @@ function migratePoolGroupToMemberships() {
     '✅ Migration complete: ' + migrated + ' participant(s) moved to MEMBERSHIPS.\n\n' +
     'You can now delete the PoolGroup column from the PARTICIPANTS sheet.'
   );
+}
+
+function patchMatchesHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const matches = ss.getSheetByName(SHEETS.MATCHES);
+  if (matches) {
+    if (!matches.getRange('L1').getValue()) matches.getRange('L1').setValue('HomePenaltyScore');
+    if (!matches.getRange('M1').getValue()) matches.getRange('M1').setValue('AwayPenaltyScore');
+    matches.getRange('L1:M1').setBackground('#1a4e8c').setFontColor('#ffffff').setFontWeight('bold');
+  }
+
+  const preds = ss.getSheetByName(SHEETS.PREDICTIONS);
+  if (preds) {
+    if (!preds.getRange('G1').getValue()) preds.getRange('G1').setValue('PenaltyWinner');
+    preds.getRange('G1').setBackground('#1a4e8c').setFontColor('#ffffff').setFontWeight('bold');
+  }
 }
 
 function _ensureSheet(ss, name, rows) {

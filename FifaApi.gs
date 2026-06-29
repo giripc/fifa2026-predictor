@@ -26,7 +26,7 @@ function fetchMatches() {
   if (!sheet) { SpreadsheetApp.getUi().alert('Run Setup first.'); return; }
 
   if (sheet.getLastRow() > 1)
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, 15).clearContent();
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
 
   var now   = new Date();
   var nowTs = now.toISOString();
